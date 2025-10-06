@@ -116,11 +116,13 @@ export default function ViewAllFMS() {
                   </div>
                 </div>
 
-                {expandedFMS === fms.fmsId && fmsDetails[fms.fmsId] && (
+                {expandedFMS === fms.fmsId && (
                   <div className="p-4 bg-white border-t border-slate-200">
-                    <h4 className="font-semibold text-slate-900 mb-3">Steps:</h4>
-                    <div className="space-y-3">
-                      {fmsDetails[fms.fmsId].map((step: any) => (
+                    {fmsDetails[fms.fmsId] && fmsDetails[fms.fmsId].steps ? (
+                      <>
+                        <h4 className="font-semibold text-slate-900 mb-3">Steps:</h4>
+                        <div className="space-y-3">
+                          {fmsDetails[fms.fmsId].steps.map((step: any) => (
                         <div
                           key={step.stepNo}
                           className="border border-slate-200 rounded-lg p-3 bg-slate-50"
@@ -149,8 +151,15 @@ export default function ViewAllFMS() {
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader className="w-6 h-6 animate-spin text-slate-600 mr-2" />
+                        <span className="text-slate-600">Loading FMS details...</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
