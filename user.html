@@ -1,0 +1,2421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ashok Malhotra Group • Task Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Custom Glassmorphism Styles */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        .glass-sidebar {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(15px);
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .gradient-bg { min-height: 100vh; }
+        /* Theme */
+        body.app-light { background: #f8fafc; }
+        body.app-dark { background: #0b1220; }
+        .app-light .text-default { color: #0f172a; }
+        .app-dark .text-default { color: #e5e7eb; }
+        .app-light .muted { color: #475569; }
+        .app-dark .muted { color: #94a3b8; }
+        .app-light .card-bg { background: #ffffff; border-color: #e2e8f0; }
+        .app-dark .card-bg { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
+        .app-light .sidebar-bg { background: #ffffff; border-color: #e2e8f0; }
+        .app-dark .sidebar-bg { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.18); }
+        .app-light .hover-row:hover { background: #f8fafc; }
+        .app-dark .hover-row:hover { background: rgba(255,255,255,0.06); }
+        /* Frosted surfaces */
+        .frost { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+        .app-light .frost { background: rgba(255,255,255,0.7); border-color: #e2e8f0; }
+        .app-dark .frost { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); }
+        /* Charts */
+        .chart-canvas { display: block; width: 100% !important; height: 100% !important; }
+        /* Nav item states for themes */
+        .app-light .nav-item:hover { background: #f1f5f9; }
+        .app-dark .nav-item:hover { background: rgba(255,255,255,0.06); }
+        .app-light .nav-item.active { background: #e2e8f0; border-left: 4px solid #0ea5e9; }
+        .app-dark .nav-item.active { background: rgba(255,255,255,0.12); border-left: 4px solid #38bdf8; }
+        /* Topbar theme */
+        .topbar-bg { position: sticky; top: 0; z-index: 30; }
+        .app-light .topbar-bg { background: #ffffff; border-color: #e2e8f0; }
+        .app-dark .topbar-bg { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
+        /* Mobile sidebar */
+        #sidebar { transition: transform 0.3s ease; }
+        .sidebar-hidden { transform: translateX(-100%); }
+        @media (min-width: 1024px) { /* lg */
+            .sidebar-hidden { transform: translateX(0); }
+        }
+        /* Mobile ergonomics */
+        @media (max-width: 640px) {
+            html { font-size: 26px !important; }
+            body { line-height: 1.6 !important; }
+            h1 { font-size: 2.6rem !important; }
+            /* Sidebar width and nav sizing */
+            #sidebar { width: 18rem !important; }
+            .nav-item { padding: 1.3rem !important; font-size: 1.5rem !important; }
+            .nav-item i { font-size: 1.4rem !important; }
+            .touch-lg { padding: 1.2rem 1.4rem !important; font-size: 1.5rem !important; }
+            .topbar-btn { height: 4.2rem !important; width: 4.2rem !important; }
+            /* Controls */
+            button { padding: 1.2rem 1.4rem !important; font-size: 1.45rem !important; }
+            input, textarea, select { font-size: 1.45rem !important; padding: 1.2rem 1.3rem !important; }
+            table { font-size: 1.4rem !important; }
+            .status-badge { font-size: 1.3rem !important; padding: 10px 20px !important; }
+            .card-bg { padding: 1.6rem !important; }
+        }
+        .nav-item {
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .nav-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateX(8px);
+        }
+        .nav-item.active {
+            background: rgba(255, 255, 255, 0.3);
+            border-left: 4px solid #fff;
+        }
+        .task-card {
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        .task-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+        }
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .status-pending { background: #FEF3C7; color: #92400E; }
+        .status-completed { background: #D1FAE5; color: #065F46; }
+        .status-revise { background: #FEE2E2; color: #991B1B; }
+        .status-overdue { background: #FECACA; color: #B91C1C; animation: pulse 5s infinite ease-in-out; }
+        .status-upcoming { background: #DBEAFE; color: #1E40AF; } /* New style for upcoming tasks */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .modal-backdrop {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+        }
+        .modal-backdrop.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+        .modal-content {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        .modal-backdrop.active .modal-content {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        /* Fixed-height tables with sticky headers */
+        .table-wrapper {
+            max-height: 60vh;
+            overflow-y: auto;
+            overflow-x: auto;
+        }
+        .table-fixed { border-collapse: separate; border-spacing: 0; }
+        .table-fixed thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            /* ✅ FIXED: Removed blur and ensured solid background for headers */
+            background: inherit;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            border-bottom: 2px solid currentColor; /* Cleaner border */
+        }
+        .app-light .table-fixed thead th { background: #ffffff; }
+        .app-dark .table-fixed thead th {
+            background: rgba(255,255,255,0.06);
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+        }
+        /* Remove focus box on table controls */
+        .table-fixed button:focus,
+        .table-fixed button:focus-visible,
+        .table-fixed a:focus,
+        .table-fixed a:focus-visible {
+            outline: none;
+            box-shadow: none;
+        }
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid white;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Skeleton shimmer loader */
+        .skeleton {
+            position: relative;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .skeleton::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -150px;
+            height: 100%;
+            width: 150px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+            animation: shimmer 1.2s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(300%); }
+        }
+        .skeleton-text { height: 28px; border-radius: 8px; }
+        .skeleton-line { height: 14px; border-radius: 6px; }
+        .skeleton-badge { height: 22px; width: 90px; border-radius: 9999px; }
+        /* Smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            transition: background 0.3s ease;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+        /* Fade-in animation for sections */
+        .section {
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            display: none; /* Ensure hidden sections are not displayed */
+        }
+        .section.active {
+            opacity: 1;
+            transform: translateY(0);
+            display: block; /* Ensure active sections are displayed */
+        }
+        /* Button hover effects */
+        button {
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        /* Filter bar styles */
+        .filter-bar {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .filter-bar .form-control {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: white;
+            margin-bottom: 0.5rem;
+        }
+        @media (min-width: 768px) {
+            .filter-bar {
+                display: flex;
+                gap: 1rem;
+                align-items: end;
+            }
+            .filter-bar .form-group {
+                flex: 1;
+            }
+            .filter-bar .form-control {
+                margin-bottom: 0;
+            }
+        }
+        /* ✅ FIXED: Make section header sticky */
+        .section-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: inherit;
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .app-light .section-header {
+            background: #f8fafc;
+        }
+        .app-dark .section-header {
+            background: #0b1220;
+        }
+    </style>
+</head>
+<body class="gradient-bg app-light">
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center">
+        <div class="glass-card p-6 text-center">
+            <div class="spinner"></div>
+            <span class="text-white">Loading...</span>
+        </div>
+    </div>
+    <!-- Login Page -->
+    <div id="loginPage" class="min-h-screen flex items-center justify-center p-4">
+        <div class="card-bg border rounded-2xl p-8 w-full max-w-md">
+            <div class="text-center mb-8">
+                <img src="https://amgrealty.in/wp-content/uploads/2025/05/AMG-logo-600x1024.png" alt="AMG Logo" class="mx-auto h-16 w-auto mb-3"/>
+                <h1 class="text-2xl font-bold text-default mb-1">Ashok Malhotra Group</h1>
+                <p class="muted">Task Management System</p>
+            </div>
+            <form id="loginForm" class="space-y-6">
+                <div>
+                    <label class="block muted text-sm font-medium mb-2">User ID</label>
+                    <input type="text" id="userId" required 
+                           class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-default placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                           placeholder="Enter your user ID">
+                </div>
+                <div>
+                    <label class="block muted text-sm font-medium mb-2">Password</label>
+                    <input type="password" id="password" required 
+                           class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-default placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                           placeholder="Enter your password">
+                </div>
+                <button type="submit" id="loginBtn"
+                        class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all duration-200">
+                    <i class="fas fa-sign-in-alt mr-2"></i> Sign In
+                </button>
+            </form>
+            <!-- Demo Credentials Display -->
+            <div class="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                <p class="muted text-sm mb-2"><i class="fas fa-info-circle mr-2"></i>Demo Credentials:</p>
+                <p class="text-default text-sm">User ID: <strong>demo</strong></p>
+                <p class="text-default text-sm">Password: <strong>demo123</strong></p>
+            </div>
+        </div>
+    </div>
+    <!-- Dashboard Page -->
+    <div id="dashboardPage" class="hidden min-h-screen lg:flex">
+        <!-- Sidebar -->
+        <div id="sidebar" class="sidebar-bg frost border-r w-64 p-6 flex flex-col fixed inset-y-0 left-0 z-40 sidebar-hidden lg:translate-x-0">
+            <div class="flex items-center mb-8">
+                <img src="https://amgrealty.in/wp-content/uploads/2025/05/AMG-logo-600x1024.png" alt="AMG" class="h-8 w-auto mr-3"/>
+                <h2 class="text-xl font-bold text-default">AMG</h2>
+            </div>
+            <nav class="space-y-2 flex-1">
+                <a href="#" onclick="showSection('overview'); toggleSidebarOnMobile();" class="nav-item active flex items-center p-3 rounded-lg text-default">
+                    <i class="fas fa-chart-pie mr-3"></i>Overview
+                </a>
+                <a href="#" onclick="showSection('upcoming'); toggleSidebarOnMobile();" class="nav-item flex items-center p-3 rounded-lg text-default">
+                    <i class="fas fa-calendar-plus mr-3"></i>Upcoming Tasks
+                </a>
+                <a href="#" onclick="showSection('pending'); toggleSidebarOnMobile();" class="nav-item flex items-center p-3 rounded-lg text-default">
+                    <i class="fas fa-clock mr-3"></i>Due Tasks
+                </a>
+                <a href="#" onclick="showSection('all'); toggleSidebarOnMobile();" class="nav-item flex items-center p-3 rounded-lg text-default">
+                    <i class="fas fa-list mr-3"></i>All Tasks
+                </a>
+                <a href="#" onclick="showSection('revisions'); toggleSidebarOnMobile();" class="nav-item flex items-center p-3 rounded-lg text-default">
+                    <i class="fas fa-edit mr-3"></i>Revisions
+                </a>
+                <a href="#" onclick="showSection('assignTask'); toggleSidebarOnMobile();" class="nav-item flex items-center p-3 rounded-lg text-default">
+                    <i class="fas fa-plus-circle mr-3"></i>Assign Task
+                </a>
+                <a href="#" onclick="showSection('scoring'); toggleSidebarOnMobile();" class="nav-item flex items-center p-3 rounded-lg text-default">
+                    <i class="fas fa-chart-line mr-3"></i>
+                    <span class="nav-text">My Performance</span>
+                </a>
+            </nav>
+            <div class="mt-auto">
+                <div class="muted text-xs mb-2" id="userInfo">
+                    Logged in as: <span id="currentUserDisplay" class="text-default font-medium"></span>
+                </div>
+                <button onclick="logout()" class="flex items-center p-3 text-red-600 hover:bg-red-50 rounded-lg w-full transition-all">
+                    <i class="fas fa-sign-out-alt mr-3"></i> Logout
+                </button>
+            </div>
+        </div>
+        <!-- Main Content -->
+        <div class="flex-1 p-0 lg:ml-64" id="mainContent">
+            <!-- Top Bar -->
+            <div class="topbar-bg border-b">
+                <div class="px-4 py-3 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <button id="sidebarToggleBtn" class="lg:hidden inline-flex items-center justify-center h-10 w-10 rounded-md border border-slate-200 topbar-btn" onclick="toggleSidebar();" aria-label="Toggle sidebar">
+                            <i id="sidebarToggleIcon" class="fas fa-bars text-default"></i>
+                        </button>
+
+            
+                        <img src="https://amgrealty.in/wp-content/uploads/2025/05/AMG-logo-600x1024.png" alt="AMG" class="h-8 w-auto"/>
+                        <div>
+                            <div class="text-default font-semibold leading-tight">Ashok Malhotra Group</div>
+                            <div class="muted text-xs leading-tight">Task Management System</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <nav id="breadcrumbs" class="hidden md:block muted text-sm mr-3"></nav>
+                        <button id="themeToggle" class="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-slate-200 text-default hover:bg-slate-50" onclick="toggleTheme()">
+                            <i class="fas fa-moon"></i>
+                            <span class="hidden sm:inline">Dark mode</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 overflow-y-auto">
+            <!-- Overview Section -->
+            <div id="overviewSection" class="section active">
+                <div class="mb-4">
+                    <h1 class="text-3xl font-extrabold text-default mb-1">Welcome back!</h1>
+                    <p class="muted">Here is an overview of your tasks</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+                    <div class="card-bg border rounded-2xl p-6 text-center task-card">
+                        <div class="text-blue-600 text-2xl mb-2">
+                            <i class="fas fa-calendar-plus"></i>
+                        </div>
+                        <div class="text-2xl font-bold text-default" id="upcomingCount">0</div>
+                        <div class="muted">Upcoming</div>
+                    </div>
+                    <div class="card-bg border rounded-2xl p-6 text-center task-card">
+                        <div class="text-yellow-500 text-2xl mb-2">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="text-2xl font-bold text-default" id="pendingCount">0</div>
+                        <div class="muted">Due Tasks</div>
+                    </div>
+                    <div class="card-bg border rounded-2xl p-6 text-center task-card">
+                        <div class="text-green-600 text-2xl mb-2">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="text-2xl font-bold text-default" id="completedCount">0</div>
+                        <div class="muted">Completed</div>
+                    </div>
+                    <div class="card-bg border rounded-2xl p-6 text-center task-card">
+                        <div class="text-red-500 text-2xl mb-2">
+                            <i class="fas fa-edit"></i>
+                        </div>
+                        <div class="text-2xl font-bold text-default" id="revisionsCount">0</div>
+                        <div class="muted">Revisions</div>
+                    </div>
+                    <div class="card-bg border rounded-2xl p-6 text-center task-card">
+                        <div class="text-orange-500 text-2xl mb-2">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="text-2xl font-bold text-default" id="overdueCount">0</div>
+                        <div class="muted">Overdue</div>
+                    </div>
+                </div>
+                <!-- Charts Area -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="card-bg frost border rounded-2xl p-6">
+                        <h3 class="text-lg font-semibold text-default mb-4">Completion Rate</h3>
+                        <div style="height:240px"><canvas id="completionDonut" class="chart-canvas"></canvas></div>
+                    </div>
+                    <div class="card-bg frost border rounded-2xl p-6 lg:col-span-2">
+                        <h3 class="text-lg font-semibold text-default mb-4">Status Overview</h3>
+                        <div style="height:240px"><canvas id="statusBar" class="chart-canvas"></canvas></div>
+                    </div>
+                    <div class="card-bg frost border rounded-2xl p-6 lg:col-span-3">
+                        <h3 class="text-lg font-semibold text-default mb-4">Planned Tasks by Month</h3>
+                        <div style="height:300px"><canvas id="monthlyLine" class="chart-canvas"></canvas></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Upcoming Tasks Section -->
+            <div id="upcomingSection" class="section hidden">
+                <div class="section-header">
+                    <div class="mb-6">
+                        <h1 class="text-3xl font-bold text-default mb-1">Upcoming Tasks</h1>
+                        <p class="muted">Tasks scheduled for future dates</p>
+                    </div>
+                    <!-- Filter Bar for Upcoming Tasks -->
+                    <div class="filter-bar mb-6">
+                        <div class="form-group">
+                            <label class="block muted text-sm font-medium mb-1">Search Tasks</label>
+                            <input type="text" id="upcomingSearchInput" oninput="applyUpcomingFilters()" placeholder="Search by ID, Description..." class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label class="block muted text-sm font-medium mb-1">Filter by Frequency</label>
+                            <select id="upcomingFrequencyFilter" onchange="applyUpcomingFilters()" class="form-control">
+                                <option value="">All Frequencies</option>
+                                <!-- Options will be populated dynamically -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-bg border rounded-2xl p-6">
+                    <div id="upcomingTasksTable" class="table-wrapper">
+                        <!-- Upcoming tasks table will be loaded here -->
+                    </div>
+                </div>
+            </div>
+            <!-- Pending Tasks Section -->
+            <div id="pendingSection" class="section hidden">
+                <div class="section-header">
+                    <div class="mb-6">
+                        <h1 class="text-3xl font-bold text-default mb-1">Due Tasks</h1>
+                        <p class="muted">Tasks that are due today or are overdue</p>
+                    </div>
+                    <!-- Filter Bar for Pending Tasks -->
+                    <div class="filter-bar mb-6">
+                        <div class="form-group">
+                            <label class="block muted text-sm font-medium mb-1">Search Tasks</label>
+                            <input type="text" id="pendingSearchInput" oninput="applyPendingFilters()" placeholder="Search by ID, Description..." class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label class="block muted text-sm font-medium mb-1">Filter by Frequency</label>
+                            <select id="pendingFrequencyFilter" onchange="applyPendingFilters()" class="form-control">
+                                <option value="">All Frequencies</option>
+                                <!-- Options will be populated dynamically -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-bg border rounded-2xl p-6">
+                    <div id="pendingTasksTable" class="table-wrapper">
+                        <!-- Pending tasks table will be loaded here -->
+                    </div>
+                </div>
+            </div>
+            <!-- All Tasks Section -->
+            <div id="allSection" class="section hidden">
+                <div class="section-header">
+                    <div class="mb-6">
+                        <h1 class="text-3xl font-bold text-default mb-1">All Tasks</h1>
+                        <p class="muted">Complete overview of all your tasks</p>
+                    </div>
+                    <!-- Filter Bar for All Tasks -->
+                    <div class="filter-bar mb-6">
+                        <div class="form-group">
+                            <label class="block muted text-sm font-medium mb-1">Search Tasks</label>
+                            <input type="text" id="allSearchInput" oninput="applyAllFilters()" placeholder="Search by ID, Description..." class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label class="block muted text-sm font-medium mb-1">Filter by Frequency</label>
+                            <select id="allFrequencyFilter" onchange="applyAllFilters()" class="form-control">
+                                <option value="">All Frequencies</option>
+                                <!-- Options will be populated dynamically -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="block muted text-sm font-medium mb-1">Filter by Status</label>
+                            <select id="allStatusFilter" onchange="applyAllFilters()" class="form-control">
+                                <option value="">All Statuses</option>
+                                <option value="upcoming">Upcoming</option>
+                                <option value="pending">Pending</option>
+                                <option value="completed">Completed</option>
+                                <option value="revise">Revision</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-bg border rounded-2xl p-6">
+                    <div id="allTasksTable" class="table-wrapper">
+                        <!-- All tasks table will be loaded here -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Assign Task Section -->
+            <div id="assignTaskSection" class="section hidden p-6">
+                <div class="section-header frost border-b px-6 py-4">
+                    <h1 class="text-2xl font-semibold text-default">Assign New Task</h1>
+                    <p class="text-sm muted mt-1">Create and assign tasks to team members</p>
+                </div>
+
+                <div class="p-6">
+                    <div class="max-w-2xl mx-auto">
+                        <form id="assignTaskForm" class="space-y-6">
+                            <!-- Task Description -->
+                            <div>
+                                <label for="taskDescription" class="block text-sm font-medium text-default mb-2">Task Description *</label>
+                                <textarea id="taskDescription" name="taskDescription" rows="4" 
+                                    class="w-full p-3 border rounded-lg bg-white text-gray-900" 
+                                    placeholder="Enter detailed task description..." required></textarea>
+                            </div>
+
+                            <!-- Assign To -->
+                              <div>
+                              <label for="assignTo" class="block text-sm font-medium text-default mb-2">Assign To *</label>
+                              <select id="assignTo" name="assignTo" class="w-full p-3 border rounded-lg bg-white text-gray-900" required>
+                                <option value="">Select team member...</option>
+                              </select>
+                            </div>
+
+                            <!-- New: Department field (auto-filled) -->
+                            <div>
+                            <label for="assignDepartment" class="block text-sm font-medium text-default mb-2">Department</label>
+                            <input type="text" id="assignDepartment" name="assignDepartment" 
+                                  class="w-full p-3 border rounded-lg bg-gray-100 text-gray-700" readonly>
+                          </div>
+
+                            <!-- Planned Date -->
+                            <div>
+                                <label for="plannedDate" class="block text-sm font-medium text-default mb-2">Planned Date *</label>
+                                <input type="date" id="plannedDate" name="plannedDate" 
+                                    class="w-full p-3 border rounded-lg bg-white text-gray-900" required>
+                            </div>
+
+                            <!-- Tutorial Links -->
+                            <div>
+                                <label for="tutorialLinks" class="block text-sm font-medium text-default mb-2">Tutorial Links (Optional)</label>
+                                <textarea id="tutorialLinks" name="tutorialLinks" rows="2" 
+                                    class="w-full p-3 border rounded-lg bg-white text-gray-900" 
+                                    placeholder="Enter helpful links or resources..."></textarea>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="flex justify-end space-x-4 pt-4">
+                                <button type="button" onclick="resetForm()" 
+                                    class="px-6 py-2 border rounded-lg hover:bg-gray-100 text-default">
+                                    Reset
+                                </button>
+                                <button type="submit" 
+                                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                                    Assign Task
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Revisions Section -->
+            <div id="revisionsSection" class="section hidden">
+                <div class="section-header">
+                    <div class="mb-6">
+                        <h1 class="text-3xl font-bold text-default mb-1">Tasks for Revision</h1>
+                        <p class="muted">Tasks that need to be revised</p>
+                    </div>
+                </div>
+                <div class="card-bg border rounded-2xl p-6">
+                    <div id="revisionsTasksTable" class="table-wrapper">
+                        <!-- Revisions tasks table will be loaded here -->
+                    </div>
+                </div>
+            </div>
+
+<div id="scoringSection" class="section hidden">
+    <div class="section-header">
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-default mb-1">My Performance Score</h1>
+            <p class="muted">View your task performance based on completion, timeliness, and revisions.</p>
+        </div>
+        <div class="filter-bar mb-6 card-bg border rounded-2xl p-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                <div class="form-group">
+                    <label class="block text-default mb-2 font-medium">Start Date</label>
+                    <input type="date" id="scoringStartDate" class="w-full p-2 rounded border bg-white text-gray-800">
+                </div>
+                <div class="form-group">
+                    <label class="block text-default mb-2 font-medium">End Date</label>
+                    <input type="date" id="scoringEndDate" class="w-full p-2 rounded border bg-white text-gray-800">
+                </div>
+                <div class="form-group">
+                     <button onclick="loadScoringData()" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold">
+                        <i class="fas fa-calculator mr-2"></i>Calculate Score
+                    </button>
+                </div>
+                 <div class="form-group">
+                    <button onclick="printScoringReport()" class="w-full bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-semibold">
+                        <i class="fas fa-print mr-2"></i>Print Report
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="scoringLoader" class="hidden text-center py-8">
+        <div class="spinner !w-12 !h-12 !border-4"></div>
+        <p class="muted mt-4 text-lg">Calculating your performance score...</p>
+    </div>
+
+    <div id="scoringResults" class="hidden">
+        <div class="card-bg frost border rounded-2xl p-6">
+            <h3 class="text-xl font-semibold text-default mb-4">Performance Summary</h3>
+            <div class="space-y-3">
+                <div class="flex justify-between items-center py-2 border-b">
+                    <span class="text-default">Total Tasks in Period</span>
+                    <span class="text-default font-bold text-lg" id="totalTasksScore">0</span>
+                </div>
+                <div class="flex justify-between items-center py-2 border-b">
+                    <span class="text-default">Completed Tasks</span>
+                    <span class="text-green-600 font-bold text-lg" id="completedTasksScore">0</span>
+                </div>
+                <div class="flex justify-between items-center py-2 border-b">
+                    <span class="text-default">Due But Not Completed</span>
+                    <span class="text-red-500 font-bold text-lg" id="dueNotCompletedScore">0</span>
+                </div>
+                <div class="flex justify-between items-center py-2 border-b">
+                    <span class="text-default">Completed On Time</span>
+                    <span class="text-default font-bold text-lg" id="onTimeTasksScore">0</span>
+                </div>
+                <div class="flex justify-between items-center py-2 border-b">
+                    <span class="text-default">Completed Late</span>
+                    <span class="text-default font-bold text-lg" id="notOnTimeScore">0</span>
+                </div>
+                <div class="flex justify-between items-center py-2 border-b">
+                    <span class="text-default">Revisions Requested</span>
+                    <span class="text-default font-bold text-lg" id="revisionsTakenScore">0</span>
+                </div>
+                <div class="flex justify-between items-center py-2 border-b">
+                    <span class="text-default">Total Penalty Points</span>
+                    <span class="text-orange-500 font-bold text-lg" id="scoresImpactedScore">0</span>
+                </div>
+                <div class="flex justify-between items-center border-t-2 pt-4 mt-4">
+                    <span class="text-default font-semibold text-2xl">Final Score</span>
+                    <span class="text-blue-600 font-bold text-3xl" id="finalScore">0%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+        </div>
+    </div>
+    <!-- Task Details Modal -->
+    <div id="taskModal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
+        <div class="card-bg border rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto modal-content">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-default">Task Details</h2>
+                <button onclick="closeTaskModal()" class="muted hover:text-default text-2xl transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="taskDetails" class="space-y-4 text-default">
+                <!-- Task details will be populated here -->
+            </div>
+            <div class="flex gap-3 mt-6 pt-6 border-t border-slate-200">
+                <button id="markCompleteBtn" onclick="markTaskComplete()" 
+                        class="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-all duration-200">
+                    <i class="fas fa-check mr-2"></i>Mark Complete
+                </button>
+                <button id="requestRevisionBtn" onclick="requestRevision()" 
+                        class="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all duration-200">
+                    <i class="fas fa-edit mr-2"></i>Request Revision
+                </button>
+            </div>
+        </div>
+    </div>
+    <script>
+        let currentUser = null;
+        let currentUserName = null;
+        let currentTask = null;
+        let allCachedTasks = []; // 🚀 Master cache for all tasks
+        let taskSummary = null;  // 📊 Cache for summary
+        let hasDoneInitialSkeleton = false; // ✅ Show skeletons only once per full page load
+        let isActionInProgress = false; // ✅ Prevent double submit/popups
+        let allUsers = []; // Store all users for the dropdown
+
+        // Initialize assign task form
+        async function initializeAssignTask() {
+            console.log('Initializing assign task form...'); // Debug log
+            const today = new Date().toISOString().split('T')[0];
+            const plannedDateInput = document.getElementById('plannedDate');
+            plannedDateInput.min = today;
+            plannedDateInput.value = today;
+            
+            try {
+                await loadUsers();
+                setupAssignTaskForm();
+                console.log('Form initialization complete'); // Debug log
+            } catch (error) {
+                console.error('Error initializing form:', error);
+                showError('Failed to initialize form');
+            }
+        }
+
+        // Load users for the assign to dropdown
+        async function loadUsers() {
+            console.log('Loading users...'); // Debug log
+            showLoading('Loading team members...');
+            
+            try {
+                if (isGoogleAppsScript) {
+                    // For Google Apps Script environment
+                    const response = await new Promise((resolve, reject) => {
+                        google.script.run
+                            .withSuccessHandler(resolve)
+                            .withFailureHandler(reject)
+                            .getUsers();
+                    });
+
+                    if (response.success) {
+                        allUsers = response.users;
+                        populateAssignToDropdown();
+                        console.log('Users loaded:', allUsers); // Debug log
+                    } else {
+                        throw new Error(response.message);
+                    }
+                } else {
+                    // For local testing
+                    allUsers = mockData.users;
+                    populateAssignToDropdown();
+                    console.log('Mock users loaded:', allUsers); // Debug log
+                }
+            } catch (error) {
+                console.error('Error loading users:', error);
+                showError('Failed to load team members: ' + error.message);
+                throw error;
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Populate the assign to dropdown
+       // Populate the assign to dropdown with name + department
+function populateAssignToDropdown() {
+    console.log('Populating dropdown with users:', allUsers); // Debug log
+    const select = document.getElementById('assignTo');
+    if (!select) {
+        console.error('Assign To select element not found');
+        return;
+    }
+    select.innerHTML = '<option value="">Select team member...</option>';
+    allUsers.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.userId;
+
+        // ✅ Show name and department in format: "Name (Department)"
+        const displayName = user.name ? `${user.name} (${user.department || 'Unknown'})` : user.userId;
+        option.textContent = displayName;
+
+        select.appendChild(option);
+    });
+    console.log('Dropdown populated with', allUsers.length, 'users'); // Debug log
+}
+
+        // Setup assign task form
+        function setupAssignTaskForm() {
+  const form = document.getElementById('assignTaskForm');
+  const assignToSelect = document.getElementById('assignTo');
+  const departmentInput = document.getElementById('assignDepartment');
+
+  // Auto-fill department when user changes
+  assignToSelect.addEventListener('change', function () {
+    const selectedUserId = this.value;
+    if (!selectedUserId) {
+      departmentInput.value = '';
+      return;
+    }
+
+    // Find user in allUsers array
+    const user = allUsers.find(u => u.userId === selectedUserId);
+    departmentInput.value = user ? user.department || '' : '';
+  });
+
+  form.addEventListener('submit', handleTaskAssignment);
+}
+        // Handle task assignment
+        async function handleTaskAssignment(event) {
+            event.preventDefault();
+            if (isActionInProgress) return;
+            
+            const taskData = {
+              description: document.getElementById('taskDescription').value,
+              assignedTo: document.getElementById('assignTo').value,
+              department: document.getElementById('assignDepartment').value, // ✅ Add this
+              plannedDate: document.getElementById('plannedDate').value,
+              tutorialLinks: document.getElementById('tutorialLinks').value,
+              givenBy: currentUser,
+              frequency: 'One Time Only'
+            };
+
+            try {
+                isActionInProgress = true;
+                showSubmittingAlert('Assigning task...');
+
+                const response = await new Promise((resolve, reject) => {
+                    google.script.run
+                        .withSuccessHandler(resolve)
+                        .withFailureHandler(reject)
+                        .assignTask(taskData);
+                });
+
+                if (response.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: 'Task assigned successfully'
+                    });
+                    resetForm();
+                    refreshCacheAndUI();
+                } else {
+                    showError('Failed to assign task: ' + response.message);
+                }
+            } catch (error) {
+                console.error('Error assigning task:', error);
+                showError('Failed to assign task');
+            } finally {
+                isActionInProgress = false;
+            }
+        }
+
+        // Reset the form
+        function resetForm() {
+            document.getElementById('assignTaskForm').reset();
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('plannedDate').value = today;
+        }
+        // Check if running in Google Apps Script environment
+        const isGoogleAppsScript = typeof google !== 'undefined' && google.script && google.script.run;
+        // Mock data for local testing
+        const mockData = {
+            users: [
+                { userId: 'demo', password: 'demo123' },
+                { userId: 'user1', password: 'password' },
+                { userId: 'admin', password: 'admin123' }
+            ],
+            tasks: [
+                {
+                    'Task Id': 'TASK001',
+                    'GIVEN BY': 'Manager Smith',
+                    'GIVEN TO': 'Demo User',
+                    'GIVEN TO USER ID': 'demo',
+                    'TASK DESCRIPTION': 'Complete quarterly financial report analysis and submit comprehensive findings to the finance department',
+                    'HOW TO DO- TUTORIAL LINKS (OPTIONAL)': 'https://example.com/financial-report-tutorial',
+                    'DEPARTMENT': 'Finance',
+                    'TASK FREQUENCY': 'Quarterly',
+                    'PLANNED DATE': '2024-01-15',
+                    'Task Status': '',
+                    'New Date if Any': '',
+                    'Reason': '',
+                    'Task Completed On': ''
+                },
+                {
+                    'Task Id': 'TASK002',
+                    'GIVEN BY': 'IT Manager Johnson',
+                    'GIVEN TO': 'Demo User',
+                    'GIVEN TO USER ID': 'demo',
+                    'TASK DESCRIPTION': 'Review and update company security protocols according to latest industry standards',
+                    'HOW TO DO- TUTORIAL LINKS (OPTIONAL)': 'https://example.com/security-protocols',
+                    'DEPARTMENT': 'IT Security',
+                    'TASK FREQUENCY': 'Monthly',
+                    'PLANNED DATE': '2024-01-20',
+                    'Task Status': 'Completed',
+                    'New Date if Any': '',
+                    'Reason': '',
+                    'Task Completed On': '2024-01-18'
+                },
+                {
+                    'Task Id': 'TASK003',
+                    'GIVEN BY': 'HR Director Williams',
+                    'GIVEN TO': 'Demo User',
+                    'GIVEN TO USER ID': 'demo',
+                    'TASK DESCRIPTION': 'Create comprehensive training materials and onboarding documentation for new employee orientation program',
+                    'HOW TO DO- TUTORIAL LINKS (OPTIONAL)': '',
+                    'DEPARTMENT': 'Human Resources',
+                    'TASK FREQUENCY': 'One-time',
+                    'PLANNED DATE': '2024-01-25',
+                    'Task Status': 'Revise',
+                    'New Date if Any': '2024-01-30',
+                    'Reason': 'Need more detailed content and interactive elements for better engagement',
+                    'Task Completed On': ''
+                },
+                {
+                    'Task Id': 'TASK004',
+                    'GIVEN BY': 'Marketing Lead Davis',
+                    'GIVEN TO': 'Demo User',
+                    'GIVEN TO USER ID': 'demo',
+                    'TASK DESCRIPTION': 'Develop social media marketing campaign for Q1 product launch',
+                    'HOW TO DO- TUTORIAL LINKS (OPTIONAL)': 'https://example.com/social-media-guide',
+                    'DEPARTMENT': 'Marketing',
+                    'TASK FREQUENCY': 'Project-based',
+                    'PLANNED DATE': '2024-06-01',
+                    'Task Status': '',
+                    'New Date if Any': '',
+                    'Reason': '',
+                    'Task Completed On': ''
+                },
+                {
+                    'Task Id': 'TASK005',
+                    'GIVEN BY': 'Operations Manager Brown',
+                    'GIVEN TO': 'Demo User',
+                    'GIVEN TO USER ID': 'demo',
+                    'TASK DESCRIPTION': 'Audit inventory management system and optimize processes',
+                    'HOW TO DO- TUTORIAL LINKS (OPTIONAL)': '',
+                    'DEPARTMENT': 'Operations',
+                    'TASK FREQUENCY': 'Bi-annual',
+                    'PLANNED DATE': '2024-02-05',
+                    'Task Status': 'Completed',
+                    'New Date if Any': '',
+                    'Reason': '',
+                    'Task Completed On': '2024-02-03'
+                },
+                {
+                    'Task Id': 'TASK006',
+                    'GIVEN BY': 'Project Manager Wilson',
+                    'GIVEN TO': 'Demo User',
+                    'GIVEN TO USER ID': 'demo',
+                    'TASK DESCRIPTION': 'Complete project documentation and submit final report',
+                    'HOW TO DO- TUTORIAL LINKS (OPTIONAL)': '',
+                    'DEPARTMENT': 'Project Management',
+                    'TASK FREQUENCY': 'One-time',
+                    'PLANNED DATE': '2023-12-15',
+                    'Task Status': '',
+                    'New Date if Any': '',
+                    'Reason': '',
+                    'Task Completed On': ''
+                },
+                {
+                    'Task Id': 'TASK007',
+                    'GIVEN BY': 'Quality Manager Taylor',
+                    'GIVEN TO': 'Demo User',
+                    'GIVEN TO USER ID': 'demo',
+                    'TASK DESCRIPTION': 'Review and update quality control procedures',
+                    'HOW TO DO- TUTORIAL LINKS (OPTIONAL)': '',
+                    'DEPARTMENT': 'Quality Assurance',
+                    'TASK FREQUENCY': 'Monthly',
+                    'PLANNED DATE': '2023-11-30',
+                    'Task Status': '',
+                    'New Date if Any': '',
+                    'Reason': '',
+                    'Task Completed On': ''
+                }
+            ]
+        };
+        // ✅ 30-Day Auto Login
+        function checkAutoLogin() {
+            const savedLogin = localStorage.getItem('taskDashboardLogin');
+            if (savedLogin) {
+                const { userId, timestamp } = JSON.parse(savedLogin);
+                const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+                if (Date.now() - timestamp < thirtyDays) {
+                    return userId;
+                }
+            }
+            return null;
+        }
+        function saveAutoLogin(userId) {
+            localStorage.setItem('taskDashboardLogin', JSON.stringify({
+                userId,
+                timestamp: Date.now()
+            }));
+        }
+        function clearAutoLogin() {
+            localStorage.removeItem('taskDashboardLogin');
+        }
+        // Utility functions
+        function showLoading() {
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        }
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+        function showError(message) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: message,
+                background: 'rgba(255, 255, 255, 0.1)',
+                color: '#fff',
+                confirmButtonColor: '#667eea',
+                backdrop: 'rgba(0,0,0,0.8)'
+            });
+        }
+        function showSuccess(title, message) {
+            Swal.fire({
+                icon: 'success',
+                title: title,
+                text: message,
+                background: 'rgba(255, 255, 255, 0.1)',
+                color: '#fff',
+                confirmButtonColor: '#667eea',
+                backdrop: 'rgba(0,0,0,0.8)'
+            });
+        }
+        // Mock functions for local testing
+        function mockLogin(userId, password) {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    const user = mockData.users.find(u => u.userId === userId && u.password === password);
+                    if (user) {
+                        resolve({ success: true, userId: userId, message: 'Login successful' });
+                    } else {
+                        resolve({ success: false, message: 'Invalid credentials' });
+                    }
+                }, 1000);
+            });
+        }
+        function mockGetTasks(userId, filter = 'all') {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    const userTasks = mockData.tasks.filter(task => task['GIVEN TO USER ID'] === userId);
+                    let filteredTasks = userTasks;
+                    if (filter !== 'all') {
+                        filteredTasks = userTasks.filter(task => {
+                            const status = (task['Task Status'] || '').toLowerCase();
+                            if (filter === 'pending') return status === 'pending' || status === '';
+                            if (filter === 'completed') return status === 'completed';
+                            if (filter === 'revisions') return status === 'revise' || status === 'revision';
+                            return true;
+                        });
+                    }
+                    resolve({ success: true, tasks: filteredTasks });
+                }, 500);
+            });
+        }
+        // ✅ Calculate task summary including overdue count
+        // ✅ UPDATED: Now includes "upcoming" count
+        function calculateTaskSummary(tasks) {
+            let upcoming = 0, pending = 0, completed = 0, revisions = 0, overdue = 0;
+            tasks.forEach(task => {
+                const status = (task['Task Status'] || '').toLowerCase().trim();
+                if (status === 'completed') {
+                    completed++;
+                } else if (status === 'revise' || status === 'revision') {
+                    revisions++;
+                } else {
+                    // Classify as upcoming or pending based on date
+                    if (task.isUpcoming) {
+                        upcoming++;
+                    } else {
+                        pending++;
+                    }
+                }
+                // Count overdue tasks (only if not completed)
+                if (task.isOverdue) {
+                    overdue++;
+                }
+            });
+            return { 
+                upcoming,
+                pending, 
+                completed, 
+                revisions, 
+                overdue, 
+                total: tasks.length 
+            };
+        }
+        function mockGetTaskSummary(userId) {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    const userTasks = mockData.tasks.filter(task => task['GIVEN TO USER ID'] === userId);
+                    const summary = calculateTaskSummary(userTasks);
+                    resolve({
+                        success: true,
+                        summary: summary
+                    });
+                }, 500);
+            });
+        }
+        function mockUpdateTask(taskId, action, extraData = {}) {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    const task = mockData.tasks.find(t => t['Task Id'] === taskId);
+                    if (!task) {
+                        resolve({ success: false, message: 'Task not found' });
+                        return;
+                    }
+                    if (action === 'complete') {
+                        task['Task Status'] = 'Completed';
+                        task['Task Completed On'] = new Date().toISOString().split('T')[0];
+                        resolve({ success: true, message: 'Task marked as completed' });
+                    } else if (action === 'revise') {
+                        task['Task Status'] = 'Revise';
+                        if (extraData.newDate) task['New Date if Any'] = extraData.newDate;
+                        if (extraData.reason) task['Reason'] = extraData.reason;
+                        resolve({ success: true, message: 'Task marked for revision' });
+                    } else {
+                        resolve({ success: false, message: 'Invalid action' });
+                    }
+                }, 500);
+            });
+        }
+        // ✅ Login functionality with auto-login
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const userId = document.getElementById('userId').value.trim();
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            if (!userId || !password) {
+                showError('Please enter both User ID and Password');
+                return;
+            }
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<div class="spinner"></div>Signing In...';
+            try {
+                let result;
+                if (isGoogleAppsScript) {
+                    result = await new Promise((resolve, reject) => {
+                        google.script.run
+                            .withSuccessHandler(resolve)
+                            .withFailureHandler(reject)
+                            .login(userId, password);
+                    });
+                } else {
+                    result = await mockLogin(userId, password);
+                }
+                if (result && result.success) {
+                    currentUser = result.userId;
+                    saveAutoLogin(currentUser); // ✅ Save for 30 days
+                    document.getElementById('currentUserDisplay').textContent = currentUser;
+                    document.getElementById('loginPage').classList.add('hidden');
+                    document.getElementById('dashboardPage').classList.remove('hidden');
+                    updateBreadcrumbs('overview');
+                    await loadDashboard();
+                    // Resolve and display user's name
+                    await resolveAndDisplayUserName();
+                } else {
+                    showError(result ? result.message : 'Login failed');
+                }
+            } catch (error) {
+                showError('Login failed: ' + error.toString());
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>Sign In';
+            }
+        });
+        // ✅ Dashboard functionality - Load everything ONCE
+        async function loadDashboard() {
+            showLoading();
+            try {
+                // Set skeletons only on first full load
+                if (!hasDoneInitialSkeleton) {
+                    setSummaryLoading(true);
+                    renderSkeletonTable('recentTasksTable', 5);
+                }
+                // Load ALL tasks and summary in parallel
+                const [summaryResult, tasksResult] = await Promise.all([
+                    fetchTaskSummary(),
+                    fetchAllTasks()
+                ]);
+                if (summaryResult.success) {
+                    taskSummary = summaryResult.summary;
+                    updateSummaryUI();
+                }
+                if (tasksResult.success) {
+                    allCachedTasks = tasksResult.tasks;
+                    enhanceTasksWithDateStatus(allCachedTasks); // ✅ Mark upcoming, pending, overdue
+                    // Recalculate summary with new counts
+                    if (!taskSummary) {
+                        taskSummary = calculateTaskSummary(allCachedTasks);
+                        updateSummaryUI();
+                    }
+                    // Render charts on overview
+                    renderOverviewCharts();
+                    // If we don't yet have a display name, try to resolve from tasks
+                    if (!currentUserName) { await resolveAndDisplayUserName(); }
+                    // Populate frequency filter dropdowns
+                    populateFrequencyFilters();
+                }
+            } catch (error) {
+                showError('Failed to load dashboard: ' + error.toString());
+            } finally {
+                if (!hasDoneInitialSkeleton) {
+                    setSummaryLoading(false);
+                    hasDoneInitialSkeleton = true;
+                }
+                hideLoading();
+            }
+        }
+        // ✅ Resolve and display the user's name
+        async function resolveAndDisplayUserName() {
+            try {
+                // Prefer GAS: get name for logged-in ID from master sheet (Column C)
+                if (isGoogleAppsScript) {
+                    const result = await new Promise((resolve, reject) => {
+                        google.script.run
+                            .withSuccessHandler(resolve)
+                            .withFailureHandler(reject)
+                            .getUserName(currentUser);
+                    });
+                    if (result && typeof result === 'string' && result.trim().length > 0) {
+                        currentUserName = result.trim();
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to fetch user name from GAS:', e);
+            }
+            // Fallback: derive from first matching task's "GIVEN TO"
+            if (!currentUserName && Array.isArray(allCachedTasks) && allCachedTasks.length > 0) {
+                const match = allCachedTasks.find(t => (t['GIVEN TO USER ID'] || '').toString().trim() === currentUser);
+                if (match && match['GIVEN TO']) {
+                    currentUserName = match['GIVEN TO'];
+                }
+            }
+            // Final fallback: show userId
+            const toDisplay = currentUserName || currentUser || '';
+            const el = document.getElementById('currentUserDisplay');
+            if (el) el.textContent = toDisplay;
+        }
+        // ✅ Fetch Summary (cached or fresh)
+       async function fetchTaskSummary() {
+  if (taskSummary) return { success: true, summary: taskSummary };
+  try {
+    let result;
+    if (isGoogleAppsScript) {
+      result = await new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(data => resolve(data || { success: false, message: 'No data returned' }))
+          .withFailureHandler(reject)
+          .getTaskSummary(currentUser);
+      });
+    } else {
+      result = await mockGetTaskSummary(currentUser);
+    }
+    if (!result || typeof result !== 'object') {
+      throw new Error('Invalid response from getTaskSummary');
+    }
+    if (result.success) {
+      taskSummary = result.summary;
+    }
+    return result;
+  } catch (error) {
+    console.error('Error fetching task summary:', error);
+    return { success: false, message: error.toString() };
+  }
+}
+        // ✅ Fetch ALL Tasks Once (cached or fresh)
+        async function fetchAllTasks() {
+            if (allCachedTasks.length > 0) {
+                return { success: true, tasks: allCachedTasks };
+            }
+            try {
+                let result;
+                if (isGoogleAppsScript) {
+                    result = await new Promise((resolve, reject) => {
+                        google.script.run
+                            .withSuccessHandler(resolve)
+                            .withFailureHandler(reject)
+                            .getTasks(currentUser, 'all');
+                    });
+                } else {
+                    result = await mockGetTasks(currentUser, 'all');
+                }
+                return result;
+            } catch (error) {
+                console.error('Error fetching all tasks:', error);
+                return { success: false, message: error.toString() };
+            }
+        }
+        // ✅ Update UI with cached summary
+        function updateSummaryUI() {
+            if (!taskSummary) return;
+            document.getElementById('upcomingCount').textContent = taskSummary.upcoming || 0;
+            document.getElementById('pendingCount').textContent = taskSummary.pending;
+            document.getElementById('completedCount').textContent = taskSummary.completed;
+            document.getElementById('revisionsCount').textContent = taskSummary.revisions;
+            document.getElementById('overdueCount').textContent = taskSummary.overdue || 0;
+        }
+        // Breadcrumbs + Theme + Sidebar
+        function updateBreadcrumbs(section) {
+            const map = { 
+                overview: 'Overview', 
+                upcoming: 'Upcoming Tasks', 
+                pending: 'Pending Tasks', 
+                all: 'All Tasks', 
+                revisions: 'Revisions',
+                assignTask: 'Assign Task',
+                scoring: 'My Performance'
+            };
+            const crumbs = `
+                <span class="text-default">Home</span>
+                <span class="mx-2">/</span>
+                <span class="text-default font-medium">${map[section] || 'Overview'}</span>
+            `;
+            const el = document.getElementById('breadcrumbs');
+            if (el) el.innerHTML = crumbs;
+        }
+        function toggleSidebar() {
+            const el = document.getElementById('sidebar');
+            el.classList.toggle('sidebar-hidden');
+            // Swap hamburger/back icon
+            const icon = document.getElementById('sidebarToggleIcon');
+            if (!icon) return;
+            if (el.classList.contains('sidebar-hidden')) {
+                icon.classList.remove('fa-arrow-left');
+                icon.classList.add('fa-bars');
+            } else {
+                icon.classList.remove('fa-bars');
+                icon.classList.add('fa-arrow-left');
+            }
+        }
+        function toggleSidebarOnMobile() {
+            if (window.innerWidth < 1024) { // lg breakpoint
+                const el = document.getElementById('sidebar');
+                if (!el.classList.contains('sidebar-hidden')) {
+                    el.classList.add('sidebar-hidden');
+                    const icon = document.getElementById('sidebarToggleIcon');
+                    if (icon) { icon.classList.remove('fa-arrow-left'); icon.classList.add('fa-bars'); }
+                }
+            }
+        }
+        function toggleTheme() {
+            const body = document.body;
+            const btn = document.getElementById('themeToggle');
+            if (body.classList.contains('app-dark')) {
+                body.classList.remove('app-dark');
+                body.classList.add('app-light');
+                btn.innerHTML = '<i class="fas fa-moon"></i><span class="hidden sm:inline">Dark mode</span>';
+            } else {
+                body.classList.remove('app-light');
+                body.classList.add('app-dark');
+                btn.innerHTML = '<i class="fas fa-sun"></i><span class="hidden sm:inline">Light mode</span>';
+            }
+        }
+        // ✅ Load recent tasks from cache (Sorted by PLANNED DATE, most recent first)
+        let charts = { donut: null, bar: null, line: null };
+        function renderOverviewCharts() {
+            if (!allCachedTasks || allCachedTasks.length === 0) return;
+            const completed = allCachedTasks.filter(t => (t['Task Status']||'').toLowerCase()==='completed').length;
+            const revisions = allCachedTasks.filter(t => ['revise','revision'].includes((t['Task Status']||'').toLowerCase())).length;
+            const pending = allCachedTasks.filter(t => {
+                const status = (t['Task Status'] || '').toLowerCase();
+                return status !== 'completed' && status !== 'revise' && status !== 'revision' && !t.isUpcoming;
+            }).length;
+            const upcoming = allCachedTasks.filter(t => t.isUpcoming).length;
+            const donutEl = document.getElementById('completionDonut');
+            const barEl = document.getElementById('statusBar');
+            const lineEl = document.getElementById('monthlyLine');
+            if (!donutEl || !barEl || !lineEl) return;
+            const total = allCachedTasks.length || 1;
+            const completionPct = Math.round((completed/total)*100);
+            // Destroy previous charts if exist to avoid height growth
+            try { charts.donut?.destroy(); } catch(e) {}
+            try { charts.bar?.destroy(); } catch(e) {}
+            try { charts.line?.destroy(); } catch(e) {}
+            // Donut
+            charts.donut = new Chart(donutEl, { type: 'doughnut', data: { labels: ['Completed','Remaining'], datasets: [{ data: [completed, total-completed], backgroundColor: ['#16a34a','#cbd5e1'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: true, position: 'bottom' }, tooltip: { enabled: true } } } });
+            // Bar
+            charts.bar = new Chart(barEl, { type: 'bar', data: { labels: ['Upcoming','Pending','Completed','Revisions','Overdue'], datasets: [{ data: [upcoming, pending, completed, revisions, (taskSummary?.overdue)||0], backgroundColor: ['#3b82f6','#f59e0b','#16a34a','#ef4444','#f97316'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision:0 } } } } });
+            // Monthly line
+            const monthBuckets = Array(12).fill(0);
+            allCachedTasks.forEach(t => { const d = t['PLANNED DATE']; if (!d) return; const m = new Date(d); if (!isNaN(m)) monthBuckets[m.getMonth()]++; });
+            charts.line = new Chart(lineEl, { type: 'line', data: { labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], datasets: [{ label: 'Planned', data: monthBuckets, borderColor: '#f97316', pointBackgroundColor: '#f97316', pointBorderColor: '#ffffff', pointBorderWidth: 2, pointRadius: 4, backgroundColor: 'rgba(249,115,22,0.15)', fill: true, tension: 0.35 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision:0 } } } } });
+        }
+        // ✅ FIXED: Show section with smooth animation and use cached data
+        // This function is now 100% reliable and can be called programmatically.
+        function showSection(section) {
+            console.log('showSection called with:', section); // Debug log
+            
+            // 1. Hide ALL sections and remove active class
+            document.querySelectorAll('.section').forEach(s => {
+                s.classList.add('hidden');
+                s.classList.remove('active');
+            });
+            
+            // 2. Remove 'active' class from all nav items
+            document.querySelectorAll('.nav-item').forEach(nav => {
+                nav.classList.remove('active');
+            });
+
+            // Initialize assign task form if showing that section
+            if (section === 'assignTask') {
+                initializeAssignTask();
+            }
+
+            // 3. Show the target section and add active class
+            const targetSection = document.getElementById(section + 'Section');
+            if (targetSection) {
+                targetSection.classList.remove('hidden');
+                targetSection.classList.add('active');
+                console.log('Target section displayed:', section + 'Section');
+            } else {
+                console.error('Could not find section:', section + 'Section');
+                return;
+            }
+
+            updateBreadcrumbs(section);
+
+            // 4. Find and activate the nav item using icons
+            let navItem = null;
+            if (section === 'overview') {
+                navItem = document.querySelector('.nav-item:has(i.fa-chart-pie)');
+            } else if (section === 'upcoming') {
+                navItem = document.querySelector('.nav-item:has(i.fa-calendar-plus)');
+            } else if (section === 'pending') {
+                navItem = document.querySelector('.nav-item:has(i.fa-clock)');
+            } else if (section === 'all') {
+                navItem = document.querySelector('.nav-item:has(i.fa-list)');
+            } else if (section === 'revisions') {
+                navItem = document.querySelector('.nav-item:has(i.fa-edit)');
+            } else if (section === 'assignTask') {
+                navItem = document.querySelector('.nav-item:has(i.fa-plus-circle)');
+            } else if (section === 'scoring') {
+                navItem = document.querySelector('.nav-item:has(i.fa-chart-line)');
+            }
+
+    // Fallback: If icon-based selection fails, try text content
+    if (!navItem) {
+        const sectionNames = {
+            'overview': 'Overview',
+            'upcoming': 'Upcoming Tasks',
+            'pending': 'Pending Tasks',
+            'all': 'All Tasks',
+            'revisions': 'Revisions',
+            'assignTask': 'Assign Task',
+            'scoring': 'My Score' // Added this mapping
+        };
+        const targetText = sectionNames[section];
+        if (targetText) {  // Only proceed if we have a valid mapping
+            navItem = Array.from(document.querySelectorAll('.nav-item')).find(item => 
+                item.textContent.trim().toLowerCase().includes(targetText.toLowerCase())
+            );
+        }
+    }
+
+    if (navItem) {
+        navItem.classList.add('active');
+        console.log('Nav item activated for:', section);
+    } else {
+        console.error('Could not find navigation item for section:', section);
+    }
+
+    // 5. Load data for non-overview sections
+    if (section !== 'overview' && section !== 'assignTask') {  // Skip data load for assign task
+        console.log('Loading data for section:', section);
+        const tableIdMap = { 
+            upcoming: 'upcomingTasksTable',
+            pending: 'pendingTasksTable', 
+            revisions: 'revisionsTasksTable', 
+            all: 'allTasksTable' 
+        };
+        const tableId = tableIdMap[section];
+        if (tableId && !hasDoneInitialSkeleton) {
+            renderSkeletonTable(tableId, 6);
+        }
+        setTimeout(() => { 
+            if (section === 'upcoming') {
+                applyUpcomingFilters();
+            } else if (section === 'pending') {
+                applyPendingFilters();
+            } else if (section === 'all') {
+                applyAllFilters();
+            } else {
+                loadSectionData(section);
+            }
+        }, 120);
+    } else {
+        console.log('On overview or assign task section, no additional data load needed.');
+    }
+}
+       // ✅ Load section data from CACHE (no API call)
+      function loadSectionData(section) {
+          if (allCachedTasks.length === 0) return;
+          const filterMap = {
+              'upcoming': { filter: 'upcoming', tableId: 'upcomingTasksTable' },
+              'pending': { filter: 'pending', tableId: 'pendingTasksTable' },
+              'revisions': { filter: 'revisions', tableId: 'revisionsTasksTable' },
+              'all': { filter: 'all', tableId: 'allTasksTable' }
+          };
+          const config = filterMap[section];
+          if (!config) return;
+          const filteredTasks = filterTasks(allCachedTasks, config.filter);
+          renderTasksTable(filteredTasks, config.tableId);
+      }
+        // ✅ Filter tasks locally (no server call)
+       // ✅ UPDATED: Now includes "upcoming" filter
+function filterTasks(tasks, filter) {
+    console.log('filterTasks called. Filter:', filter, 'Total tasks:', tasks.length); // Debug log
+    const result = tasks.filter(task => {
+        const status = (task['Task Status'] || '').toLowerCase();
+        console.log('Checking task:', task['Task Id'], 'Status:', status); // Debug log for each task
+        if (filter === 'upcoming') {
+            const isUpcoming = task.isUpcoming;
+            console.log('Task is upcoming:', isUpcoming); // Debug log
+            return isUpcoming;
+        }
+        if (filter === 'pending') {
+            // ✅ UPDATED: Pending = Not Completed, Not in Revision, and NOT upcoming (i.e., due today or overdue)
+            const isPending = !task.isUpcoming && status !== 'completed' && status !== 'revise' && status !== 'revision';
+            console.log('Task is pending:', isPending); // Debug log
+            return isPending;
+        }
+        if (filter === 'completed') {
+            const isCompleted = status === 'completed';
+            console.log('Task is completed:', isCompleted); // Debug log
+            return isCompleted;
+        }
+        if (filter === 'revisions') {
+            const isRevision = status === 'revise' || status === 'revision';
+            console.log('Task is revision:', isRevision); // Debug log
+            return isRevision;
+        }
+        return true; // 'all'
+    });
+    console.log('filterTasks returning', result.length, 'tasks'); // Debug log
+    return result;
+}
+        // ✅✅✅ DEBUG Render tasks table with overdue detection
+        // ✅ UPDATED: Replaced "Department" with "Tutorial" column.
+function renderTasksTable(tasks, tableId) {
+    console.log('renderTasksTable called. Table ID:', tableId, 'Task count:', tasks.length); // Debug log
+    const table = document.getElementById(tableId);
+    // ✅✅✅ CRITICAL DEBUG: Check if the table element exists
+    if (!table) {
+        console.error('ERROR: Could not find element with ID:', tableId);
+        console.log('Available elements with similar IDs:');
+        document.querySelectorAll('[id*="Table"]').forEach(el => console.log('- ' + el.id));
+        return;
+    }
+    console.log('Element found:', table); // Debug log
+    // Check if the parent section is visible
+    const parentSection = table.closest('.section');
+    if (parentSection && parentSection.classList.contains('hidden')) {
+        console.warn('Parent section is hidden, table may not be visible');
+    }
+    if (tasks.length === 0) {
+        table.innerHTML = '<div class="text-center py-12"><i class="fas fa-inbox text-4xl muted mb-4"></i><p class="muted">No tasks found</p></div>';
+        console.log('Rendered "No tasks found" message.'); // Debug log
+        return;
+    }
+    let html = `
+        <table class="w-full text-default table-fixed">
+            <thead class="border-b border-white/20">
+                <tr>
+                    <th class="text-left py-3 px-2 font-semibold">Task ID</th>
+                    <th class="text-left py-3 px-2 font-semibold">Description</th>
+                    <th class="text-left py-3 px-2 font-semibold">Tutorial</th> <!-- ✅ REPLACED: Department with Tutorial -->
+                    <th class="text-left py-3 px-2 font-semibold">Status</th>
+                    ${tableId === 'revisionsTasksTable' ? '<th class="text-left py-3 px-2 font-semibold">Revision Status</th>' : ''}
+
+                    <th class="text-left py-3 px-2 font-semibold">Planned Date</th>
+                    <th class="text-left py-3 px-2 font-semibold">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200">
+    `;
+    tasks.forEach(task => {
+        const status = (task['Task Status'] || '').toString().toLowerCase();
+        let statusClass = 'status-pending';
+        let statusDisplay = 'Pending';
+        if (status === 'completed') {
+            statusClass = 'status-completed';
+            statusDisplay = 'Completed';
+        } else if (status === 'revise' || status === 'revision') {
+            statusClass = 'status-revise';
+            statusDisplay = 'Revise';
+        } else if (task.isUpcoming) {
+            statusClass = 'status-upcoming'; // ✅ New class for upcoming
+            statusDisplay = 'Upcoming';
+        }
+        // ✅ Check if task is overdue (overrides other statuses)
+        if (task.isOverdue) {
+            statusClass = 'status-overdue';
+            statusDisplay = 'Overdue';
+        }
+        const description = task['TASK DESCRIPTION'] || '';
+        const truncatedDescription = description.length > 50 ? description.substring(0, 50) + '...' : description;
+        const tutorialLink = task['HOW TO DO- TUTORIAL LINKS (OPTIONAL)'] || '';
+        const revisionStatus = (task['Revision Status'] || task['REVISION STATUS'] || task['Revision status'] || task['REVISION'] || task['Revision'] || '').toString();
+        html += `
+            <tr class="hover-row transition-colors">
+                <td class="py-3 px-2 font-medium">${task['Task Id'] || ''}</td>
+                <td class="py-3 px-2 max-w-xs" title="${description}">${truncatedDescription}</td>
+                <td class="py-3 px-2">
+                    ${tutorialLink ? `<a href="${tutorialLink}" target="_blank" class="text-blue-600 underline">Click Here</a>` : 'N/A'}
+                </td>
+                <td class="py-3 px-2">
+                    <span class="status-badge ${statusClass}">${statusDisplay}</span>
+                </td>
+                ${tableId === 'revisionsTasksTable' ? `<td class=\"py-3 px-2\">${revisionStatus}</td>` : ''}
+                <td class="py-3 px-2">${formatDate(task['PLANNED DATE'])}</td>
+                <td class="py-3 px-2">
+                    <button onclick="openTaskModal('${task['Task Id']}')" class="text-blue-600 hover:text-blue-700 transition-colors">
+                        <i class="fas fa-eye mr-1"></i> View
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    html += '</tbody></table>';
+    table.innerHTML = html;
+    console.log('Table HTML successfully rendered for:', tableId); // Debug log
+    // Force a reflow to ensure the table is visible
+    table.offsetHeight;
+    // Additional debug: Check if table content is actually visible
+    setTimeout(() => {
+        const tableRows = table.querySelectorAll('tbody tr');
+        console.log('Table rendered with', tableRows.length, 'rows');
+        if (tableRows.length > 0) {
+            console.log('First row content:', tableRows[0].textContent);
+        }
+    }, 50);
+}
+        // ✅ Render skeleton rows inside a table container
+        // ✅ UPDATED: Added skeleton for "Tutorial" column.
+        function renderSkeletonTable(tableId, rows = 5) {
+            const container = document.getElementById(tableId);
+            if (!container) return;
+            const isAll = tableId === 'allTasksTable';
+            const isRev = tableId === 'revisionsTasksTable';
+            let skeletonRows = '';
+            for (let i = 0; i < rows; i++) {
+                skeletonRows += `
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-2"><div class="skeleton skeleton-line w-24"></div></td>
+                        <td class="py-3 px-2"><div class="skeleton skeleton-line w-64"></div></td>
+                        <td class="py-3 px-2"><div class="skeleton skeleton-line w-28"></div> <!-- TUTORIAL SKELETON --></td>
+                        <td class="py-3 px-2"><div class="skeleton skeleton-badge"></div></td>
+                        ${isRev ? '<td class="py-3 px-2"><div class="skeleton skeleton-line w-24"></div></td>' : ''}
+                        <td class="py-3 px-2"><div class="skeleton skeleton-line w-28"></div></td>
+                        <td class="py-3 px-2"><div class="skeleton skeleton-line w-16"></div></td>
+                    </tr>
+                `;
+            }
+            container.innerHTML = `
+                <table class="w-full text-default table-fixed">
+                    <thead class="border-b border-slate-200">
+                        <tr>
+                            <th class="text-left py-3 px-2 font-semibold">Task ID</th>
+                            <th class="text-left py-3 px-2 font-semibold">Description</th>
+                            <th class="text-left py-3 px-2 font-semibold">Tutorial</th> <!-- HEADER -->
+                            <th class="text-left py-3 px-2 font-semibold">Status</th>
+                            ${isRev ? '<th class="text-left py-3 px-2 font-semibold">Revision Status</th>' : ''}
+                            <th class="text-left py-3 px-2 font-semibold">Planned Date</th>
+                            <th class="text-left py-3 px-2 font-semibold">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">${skeletonRows}</tbody>
+                </table>
+            `;
+        }
+        // ✅ Toggle skeletons for summary counters
+        function setSummaryLoading(isLoading) {
+            const ids = ['upcomingCount', 'pendingCount', 'completedCount', 'revisionsCount', 'overdueCount'];
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (isLoading) {
+                    el.dataset.prevText = el.textContent;
+                    el.classList.add('skeleton', 'skeleton-text');
+                    el.textContent = '';
+                } else {
+                    el.classList.remove('skeleton', 'skeleton-text');
+                    if (el.dataset.prevText !== undefined) delete el.dataset.prevText;
+                }
+            });
+        }
+        // ✅ SweetAlert submitting indicator for actions
+        function showSubmittingAlert(text = 'Please wait...') {
+            Swal.fire({
+                title: 'Processing',
+                html: `<div class="spinner" style="margin-right:8px; vertical-align: middle;"></div><span>${text}</span>`,
+
+                background: 'rgba(255, 255, 255, 0.1)',
+                color: '#fff',
+                showConfirmButton: false,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                backdrop: 'rgba(0,0,0,0.8)'
+            });
+        }
+        // ✅ Enhanced date formatting (Robust for "yyyy-MM-dd" format)
+        function formatDate(dateString) {
+            if (!dateString) return '';
+            // If it's in "yyyy-MM-dd", format manually for 100% reliability
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+                const [year, month, day] = dateString.split('-');
+                const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                return `${monthNames[parseInt(month, 10) - 1]} ${parseInt(day, 10)}, ${year}`;
+            }
+            // Fallback for any other format
+            try {
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) {
+                    return dateString;
+                }
+                return date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            } catch (error) {
+                console.error('Error formatting date:', dateString, error);
+                return dateString;
+            }
+        }
+        // ✅ Enhanced task date status detection (Upcoming, Pending, Overdue)
+        function enhanceTasksWithDateStatus(tasks) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Normalize to start of day
+            tasks.forEach(task => {
+                // Reset statuses
+                task.isUpcoming = false;
+                task.isOverdue = false;
+                // Skip if task is completed
+                const status = (task['Task Status'] || '').toLowerCase().trim();
+                if (status === 'completed') {
+                    return;
+                }
+                // Skip if no planned date
+                const plannedDateStr = task['PLANNED DATE'];
+                if (!plannedDateStr) {
+                    return;
+                }
+                try {
+                    // Parse the planned date - handle both "yyyy-MM-dd" and other formats
+                    let plannedDate;
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(plannedDateStr)) {
+                        // Handle "yyyy-MM-dd" format directly
+                        const [year, month, day] = plannedDateStr.split('-');
+                        plannedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                    } else {
+                        // Handle other date formats
+                        plannedDate = new Date(plannedDateStr);
+                    }
+                    // Validate the date
+                    if (isNaN(plannedDate.getTime())) {
+                        console.warn('Invalid date format for task:', task['Task Id'], 'Date:', plannedDateStr);
+                        return;
+                    }
+                    // Normalize to start of day for comparison
+                    plannedDate.setHours(0, 0, 0, 0);
+                    // Mark as upcoming if planned date is after today
+                    task.isUpcoming = plannedDate > today;
+                    // Mark as overdue if planned date is before today
+                    task.isOverdue = plannedDate < today;
+                    // Debug logging
+                    if (task.isUpcoming) {
+                        console.log('Task marked as upcoming:', task['Task Id'], 'Planned:', plannedDateStr);
+                    }
+                    if (task.isOverdue) {
+                        console.log('Task marked as overdue:', task['Task Id'], 'Planned:', plannedDateStr, 'Today:', today.toISOString().split('T')[0]);
+                    }
+                } catch (error) {
+                    console.error('Error processing date for task:', task['Task Id'], 'Date:', plannedDateStr, 'Error:', error);
+                }
+            });
+        }
+        // ✅ Open task modal from CACHE (no API call)
+        function openTaskModal(taskId) {
+            // Find task from cached data
+            const task = allCachedTasks.find(t => t['Task Id'] === taskId);
+            if (task) {
+                showTaskDetails(task);
+                document.getElementById('taskModal').classList.add('active');
+            } else {
+                showError('Task not found in cache');
+            }
+        }
+        function showTaskDetails(task) {
+            currentTask = task;
+            const details = document.getElementById('taskDetails');
+            // ✅ Check if task is overdue for modal display
+            const isOverdue = task.isOverdue ? '<span class="text-red-400 ml-2"><i class="fas fa-exclamation-triangle"></i> OVERDUE</span>' : '';
+            details.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block muted text-sm font-medium mb-1">Task ID</label>
+                        <p class="text-default font-medium">${task['Task Id'] || ''}</p>
+                    </div>
+                    <div>
+                        <label class="block muted text-sm font-medium mb-1">Given By</label>
+                        <p class="text-default">${task['GIVEN BY'] || ''}</p>
+                    </div>
+                    <div>
+                        <label class="block muted text-sm font-medium mb-1">Department</label>
+                        <p class="text-default">${task['DEPARTMENT'] || ''}</p>
+                    </div>
+                    <div>
+                        <label class="block muted text-sm font-medium mb-1">Frequency</label>
+                        <p class="text-default">${task['TASK FREQUENCY'] || ''}</p>
+                    </div>
+                    <div>
+                        <label class="block muted text-sm font-medium mb-1">Planned Date</label>
+                        <p class="text-default">${formatDate(task['PLANNED DATE'])} ${isOverdue}</p>
+                    </div>
+                    <div>
+                        <label class="block muted text-sm font-medium mb-1">Status</label>
+                        <p class="text-default">
+                            <span class="status-badge ${getStatusClass(task)}">${getStatusDisplay(task)}</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="mt-6">
+                    <label class="block muted text-sm font-medium mb-2">Description</label>
+                    <div class="card-bg rounded-lg p-4 border">
+                        <p class="text-default leading-relaxed">${task['TASK DESCRIPTION'] || ''}</p>
+                    </div>
+                </div>
+                ${task['HOW TO DO- TUTORIAL LINKS (OPTIONAL)'] ? `
+
+                <div class="mt-4">
+                    <label class="block muted text-sm font-medium mb-2">Tutorial Links</label>
+                    <div class="card-bg rounded-lg p-4 border">
+                        <a href="${task['HOW TO DO- TUTORIAL LINKS (OPTIONAL)']}" target="_blank" class="text-blue-600 hover:text-blue-700 underline">
+                            <i class="fas fa-external-link-alt mr-1"></i>${task['HOW TO DO- TUTORIAL LINKS (OPTIONAL)']}
+                        </a>
+                    </div>
+                </div>
+                ` : ''}
+                ${task['New Date if Any'] ? `
+                <div class="mt-4">
+                    <label class="block muted text-sm font-medium mb-1">New Date</label>
+                    <p class="text-default">${formatDate(task['New Date if Any'])}</p>
+                </div>
+                ` : ''}
+                ${task['Reason'] ? `
+                <div class="mt-4">
+                    <label class="block muted text-sm font-medium mb-2">Reason</label>
+                    <div class="card-bg rounded-lg p-4 border">
+                        <p class="text-default">${task['Reason']}</p>
+                    </div>
+                </div>
+                ` : ''}
+                ${task['Task Completed On'] ? `
+                <div class="mt-4">
+                    <label class="block muted text-sm font-medium mb-1">Completed On</label>
+                    <p class="text-default">${formatDate(task['Task Completed On'])}</p>
+                </div>
+                ` : ''}
+            `;
+            // Show/hide buttons based on task status
+            const status = (task['Task Status'] || '').toLowerCase();
+            const markCompleteBtn = document.getElementById('markCompleteBtn');
+            const requestRevisionBtn = document.getElementById('requestRevisionBtn');
+            if (status === 'completed') {
+                markCompleteBtn.style.display = 'none';
+                requestRevisionBtn.style.display = 'none';
+            } else {
+                markCompleteBtn.style.display = 'block';
+                requestRevisionBtn.style.display = 'block';
+            }
+        }
+        // ✅ Helper function to get status class for a task
+        function getStatusClass(task) {
+            const status = (task['Task Status'] || '').toLowerCase();
+            if (status === 'completed') return 'status-completed';
+            if (status === 'revise' || status === 'revision') return 'status-revise';
+            if (task.isUpcoming) return 'status-upcoming';
+            if (task.isOverdue) return 'status-overdue';
+            return 'status-pending';
+        }
+        // ✅ Helper function to get status display text for a task
+        function getStatusDisplay(task) {
+            const status = (task['Task Status'] || '').toLowerCase();
+            if (status === 'completed') return 'Completed';
+            if (status === 'revise' || status === 'revision') return 'Revise';
+            if (task.isUpcoming) return 'Upcoming';
+            if (task.isOverdue) return 'Overdue';
+            return 'Pending';
+        }
+        function closeTaskModal() {
+            document.getElementById('taskModal').classList.remove('active');
+            currentTask = null;
+        }
+        async function markTaskComplete() {
+            if (isActionInProgress) return;
+            if (!currentTask) return;
+            const result = await Swal.fire({
+                title: 'Mark Task Complete?',
+                text: 'Are you sure you want to mark this task as completed?',
+                icon: 'question',
+                background: 'rgba(255, 255, 255, 0.1)',
+                color: '#fff',
+                confirmButtonColor: '#10B981',
+                cancelButtonColor: '#6B7280',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, Mark Complete',
+                cancelButtonText: 'Cancel',
+                backdrop: 'rgba(0,0,0,0.8)'
+            });
+            if (!result.isConfirmed) return;
+            isActionInProgress = true;
+            // Disable modal buttons to avoid double clicks
+            try { document.getElementById('markCompleteBtn').disabled = true; } catch (e) {}
+            try { document.getElementById('requestRevisionBtn').disabled = true; } catch (e) {}
+            showSubmittingAlert('Updating task status...');
+            try {
+                let updateResult;
+                if (isGoogleAppsScript) {
+                    updateResult = await new Promise((resolve, reject) => {
+                        google.script.run
+                            .withSuccessHandler(resolve)
+                            .withFailureHandler(reject)
+                            .updateTask(currentTask['Task Id'], 'complete');
+                    });
+                } else {
+                    updateResult = await mockUpdateTask(currentTask['Task Id'], 'complete');
+                }
+                if (updateResult && updateResult.success) {
+                    Swal.close();
+                    showSuccess('Task Completed!', updateResult.message);
+                    closeTaskModal();
+                    // ✅ Refresh cache and UI
+                    await refreshCacheAndUI();
+                } else {
+                    Swal.close();
+                    showError(updateResult ? updateResult.message : 'Failed to update task');
+                }
+            } catch (error) {
+                Swal.close();
+                showError('Failed to update task: ' + error.toString());
+            } finally {
+                isActionInProgress = false;
+                try { document.getElementById('markCompleteBtn').disabled = false; } catch (e) {}
+                try { document.getElementById('requestRevisionBtn').disabled = false; } catch (e) {}
+            }
+        }
+        async function requestRevision() {
+            if (!currentTask) return;
+            const { value: formValues } = await Swal.fire({
+                title: 'Request Revision',
+                html: `
+                    <div class="text-left space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2 text-gray-700">New Date (Optional)</label>
+                            <input id="newDate" type="date" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2 text-gray-700">Reason for Revision *</label>
+                            <textarea id="reason" class="w-full p-3 border border-gray-300 rounded-lg h-24 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Please provide a detailed reason for requesting revision..." required></textarea>
+                        </div>
+                    </div>
+                `,
+                background: '#ffffff',
+                color: '#374151',
+                confirmButtonColor: '#DC2626',
+                cancelButtonColor: '#6B7280',
+                showCancelButton: true,
+                confirmButtonText: 'Submit Revision Request',
+                cancelButtonText: 'Cancel',
+                width: '32rem',
+                backdrop: 'rgba(0,0,0,0.8)',
+                preConfirm: () => {
+                    const newDate = document.getElementById('newDate').value;
+                    const reason = document.getElementById('reason').value.trim();
+                    if (!reason) {
+                        Swal.showValidationMessage('Please provide a reason for revision');
+                        return false;
+                    }
+                    if (reason.length < 10) {
+                        Swal.showValidationMessage('Please provide a more detailed reason (at least 10 characters)');
+                        return false;
+                    }
+                    return { newDate, reason };
+                }
+            });
+            if (formValues) {
+                if (isActionInProgress) return;
+                isActionInProgress = true;
+                try { document.getElementById('markCompleteBtn').disabled = true; } catch (e) {}
+                try { document.getElementById('requestRevisionBtn').disabled = true; } catch (e) {}
+                showSubmittingAlert('Submitting revision request...');
+                try {
+                    let updateResult;
+                    if (isGoogleAppsScript) {
+                        updateResult = await new Promise((resolve, reject) => {
+                            google.script.run
+                                .withSuccessHandler(resolve)
+                                .withFailureHandler(reject)
+                                .updateTask(currentTask['Task Id'], 'revise', formValues);
+                        });
+                    } else {
+                        updateResult = await mockUpdateTask(currentTask['Task Id'], 'revise', formValues);
+                    }
+                    if (updateResult && updateResult.success) {
+                        Swal.close();
+                        showSuccess('Revision Requested!', updateResult.message);
+                        closeTaskModal();
+                        // ✅ Refresh cache and UI
+                        await refreshCacheAndUI();
+                    } else {
+                        Swal.close();
+                        showError(updateResult ? updateResult.message : 'Failed to update task');
+                    }
+                } catch (error) {
+                    Swal.close();
+                    showError('Failed to update task: ' + error.toString());
+                } finally {
+                    isActionInProgress = false;
+                    try { document.getElementById('markCompleteBtn').disabled = false; } catch (e) {}
+                    try { document.getElementById('requestRevisionBtn').disabled = false; } catch (e) {}
+                }
+            }
+        }
+        // ✅ Refresh cache and UI after task update
+        async function refreshCacheAndUI() {
+            // Clear cache
+            allCachedTasks = [];
+            taskSummary = null;
+            // Reload dashboard
+            await loadDashboard();
+            // Refresh current section from new cache
+            const activeNav = document.querySelector('.nav-item.active');
+            if (activeNav) {
+                const text = activeNav.textContent.toLowerCase();
+                if (text.includes('overview')) {
+                    // Already refreshed by loadDashboard
+                } else if (text.includes('upcoming')) {
+                    applyUpcomingFilters();
+                } else if (text.includes('pending')) {
+                    applyPendingFilters();
+                } else if (text.includes('all')) {
+                    applyAllFilters();
+                } else if (text.includes('revision')) {
+                    loadSectionData('revisions');
+                }
+            }
+        }
+        function logout() {
+            Swal.fire({
+                title: 'Confirm Logout',
+                text: "You will be logged out of your session",
+                icon: 'warning',
+                background: 'rgba(255, 255, 255, 0.1)',
+                color: '#fff',
+                confirmButtonColor: '#DC2626',
+                cancelButtonColor: '#6B7280',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, Logout',
+                cancelButtonText: 'Cancel',
+                backdrop: 'rgba(0,0,0,0.8)'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    currentUser = null;
+                    currentTask = null;
+                    allCachedTasks = [];
+                    taskSummary = null;
+                    clearAutoLogin(); // ✅ Clear 30-day login
+                    document.getElementById('dashboardPage').classList.add('hidden');
+                    document.getElementById('loginPage').classList.remove('hidden');
+                    document.getElementById('userId').value = '';
+                    document.getElementById('password').value = '';
+                    // Reset to overview section
+                    document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
+                    document.getElementById('overviewSection').classList.remove('hidden');
+                    document.getElementById('overviewSection').classList.add('active');
+                    document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+                    document.querySelector('.nav-item').classList.add('active');
+                }
+            });
+        }
+        // Close modal when clicking outside
+        document.getElementById('taskModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeTaskModal();
+            }
+        });
+        // Close sidebar on outside click (mobile only)
+        document.addEventListener('click', function(e) {
+            const sidebar = document.getElementById('sidebar');
+            const toggleBtn = document.getElementById('sidebarToggleBtn');
+            if (window.innerWidth >= 1024) return; // only on mobile
+            if (!sidebar || !toggleBtn) return;
+            const clickedInsideSidebar = sidebar.contains(e.target);
+            const clickedToggle = toggleBtn.contains(e.target);
+            if (!clickedInsideSidebar && !clickedToggle && !sidebar.classList.contains('sidebar-hidden')) {
+                sidebar.classList.add('sidebar-hidden');
+                const icon = document.getElementById('sidebarToggleIcon');
+                if (icon) { icon.classList.remove('fa-arrow-left'); icon.classList.add('fa-bars'); }
+            }
+        });
+        // Handle escape key for modal
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeTaskModal();
+            }
+        });
+        // ✅ Populate the frequency filter dropdowns
+        function populateFrequencyFilters() {
+            // Get unique frequencies from cached tasks
+            const frequencies = [...new Set(allCachedTasks.map(t => t['TASK FREQUENCY'] || '').filter(f => f))];
+            frequencies.sort();
+            // Populate dropdowns
+            ['upcomingFrequencyFilter', 'pendingFrequencyFilter', 'allFrequencyFilter'].forEach(id => {
+                const select = document.getElementById(id);
+                if (!select) return;
+                // Clear existing options (except the first "All" option)
+                while (select.options.length > 1) {
+                    select.remove(1);
+                }
+                // Add new options
+                frequencies.forEach(freq => {
+                    const option = document.createElement('option');
+                    option.value = freq;
+                    option.textContent = freq;
+                    select.appendChild(option);
+                });
+            });
+        }
+        // ✅ Apply filters for Upcoming Tasks section
+        function applyUpcomingFilters() {
+            if (allCachedTasks.length === 0) return;
+            const searchTerm = document.getElementById('upcomingSearchInput')?.value.toLowerCase() || '';
+            const frequencyFilter = document.getElementById('upcomingFrequencyFilter')?.value || '';
+            // Get all upcoming tasks
+            let filteredTasks = filterTasks(allCachedTasks, 'upcoming');
+            // Apply search filter
+            if (searchTerm) {
+                filteredTasks = filteredTasks.filter(task => 
+                    (task['Task Id'] || '').toLowerCase().includes(searchTerm) ||
+                    (task['TASK DESCRIPTION'] || '').toLowerCase().includes(searchTerm)
+                );
+            }
+            // Apply frequency filter
+            if (frequencyFilter) {
+                filteredTasks = filteredTasks.filter(task => 
+                    (task['TASK FREQUENCY'] || '') === frequencyFilter
+                );
+            }
+            renderTasksTable(filteredTasks, 'upcomingTasksTable');
+        }
+        // ✅ Apply filters for Pending Tasks section
+        function applyPendingFilters() {
+            if (allCachedTasks.length === 0) return;
+            const searchTerm = document.getElementById('pendingSearchInput')?.value.toLowerCase() || '';
+            const frequencyFilter = document.getElementById('pendingFrequencyFilter')?.value || '';
+            // Get all pending tasks
+            let filteredTasks = filterTasks(allCachedTasks, 'pending');
+            // Apply search filter
+            if (searchTerm) {
+                filteredTasks = filteredTasks.filter(task => 
+                    (task['Task Id'] || '').toLowerCase().includes(searchTerm) ||
+                    (task['TASK DESCRIPTION'] || '').toLowerCase().includes(searchTerm)
+                );
+            }
+            // Apply frequency filter
+            if (frequencyFilter) {
+                filteredTasks = filteredTasks.filter(task => 
+                    (task['TASK FREQUENCY'] || '') === frequencyFilter
+                );
+            }
+            renderTasksTable(filteredTasks, 'pendingTasksTable');
+        }
+        // ✅ Apply filters for All Tasks section
+        function applyAllFilters() {
+            if (allCachedTasks.length === 0) return;
+            const searchTerm = document.getElementById('allSearchInput')?.value.toLowerCase() || '';
+            const frequencyFilter = document.getElementById('allFrequencyFilter')?.value || '';
+            const statusFilter = document.getElementById('allStatusFilter')?.value || '';
+            // Get all tasks
+            let filteredTasks = allCachedTasks;
+            // Apply search filter
+            if (searchTerm) {
+                filteredTasks = filteredTasks.filter(task => 
+                    (task['Task Id'] || '').toLowerCase().includes(searchTerm) ||
+                    (task['TASK DESCRIPTION'] || '').toLowerCase().includes(searchTerm)
+                );
+            }
+            // Apply frequency filter
+            if (frequencyFilter) {
+                filteredTasks = filteredTasks.filter(task => 
+                    (task['TASK FREQUENCY'] || '') === frequencyFilter
+                );
+            }
+            // Apply status filter
+            if (statusFilter) {
+                filteredTasks = filteredTasks.filter(task => {
+                    const status = (task['Task Status'] || '').toLowerCase();
+                    if (statusFilter === 'upcoming') {
+                        return task.isUpcoming;
+                    } else if (statusFilter === 'pending') {
+                        return !task.isUpcoming && status !== 'completed' && status !== 'revise' && status !== 'revision';
+                    } else if (statusFilter === 'completed') {
+                        return status === 'completed';
+                    } else if (statusFilter === 'revise') {
+                        return status === 'revise' || status === 'revision';
+                    }
+                    return true;
+                });
+            }
+            renderTasksTable(filteredTasks, 'allTasksTable');
+        }
+
+        // --- SCORING SECTION FUNCTIONS ---
+
+        // Sets default dates and adds event listeners for the scoring section
+        function initializeScoringSection() {
+            const startDateInput = document.getElementById('scoringStartDate');
+            const endDateInput = document.getElementById('scoringEndDate');
+            
+            // Set default end date to today
+            const today = new Date();
+            endDateInput.value = today.toISOString().split('T')[0];
+
+            // Set default start date to the first day of the current month
+            const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            startDateInput.value = firstDayOfMonth.toISOString().split('T')[0];
+        }
+
+        // Fetches and displays the scoring data from the backend
+        async function loadScoringData() {
+            const startDate = document.getElementById('scoringStartDate').value;
+            const endDate = document.getElementById('scoringEndDate').value;
+
+            if (!startDate || !endDate) {
+                showError('Please select both a start and end date.');
+                return;
+            }
+
+            document.getElementById('scoringLoader').classList.remove('hidden');
+            document.getElementById('scoringResults').classList.add('hidden');
+
+            try {
+                const request = { personId: currentUser, startDate, endDate };
+                let result;
+                if (isGoogleAppsScript) {
+                     result = await new Promise((resolve, reject) => {
+                        google.script.run
+                            .withSuccessHandler(resolve)
+                            .withFailureHandler(reject)
+                            .getScoringData(request);
+                    });
+                } else {
+                    result = await mockGetScoringData(request); // For local testing
+                }
+
+                if (result && result.success) {
+                    displayScoringResults(result.data);
+                } else {
+                    showError(result.message || 'Failed to calculate score.');
+                }
+            } catch (error) {
+                console.error('Error loading scoring data:', error);
+                showError('An error occurred while calculating the score.');
+            } finally {
+                document.getElementById('scoringLoader').classList.add('hidden');
+            }
+        }
+
+        // Populates the UI with the calculated scoring results
+        function displayScoringResults(data) {
+            document.getElementById('totalTasksScore').textContent = data.totalTasks;
+            document.getElementById('completedTasksScore').textContent = data.completedTasks;
+            document.getElementById('dueNotCompletedScore').textContent = data.dueNotCompleted;
+            document.getElementById('onTimeTasksScore').textContent = data.completedOnTime;
+            document.getElementById('notOnTimeScore').textContent = data.completedNotOnTime;
+            document.getElementById('revisionsTakenScore').textContent = data.revisionsTaken;
+            document.getElementById('scoresImpactedScore').textContent = data.scoresImpacted;
+            document.getElementById('finalScore').textContent = `${data.finalScore}%`;
+            
+            document.getElementById('scoringResults').classList.remove('hidden');
+        }
+
+        // Opens a new window with a print-friendly report
+        function printScoringReport() {
+            const resultsSection = document.getElementById('scoringResults');
+            if (resultsSection.classList.contains('hidden')) {
+                showError('Please calculate a score before printing.');
+                return;
+            }
+
+            const startDate = formatDate(document.getElementById('scoringStartDate').value);
+            const endDate = formatDate(document.getElementById('scoringEndDate').value);
+
+            const reportContent = `
+                <html>
+                <head>
+                    <title>Performance Report for ${currentUserName || currentUser}</title>
+                    <style>
+                        body { font-family: sans-serif; margin: 2rem; }
+                        h1, h2 { color: #333; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+                        th, td { border: 1px solid #ccc; padding: 12px; text-align: left; }
+                        th { background-color: #f2f2f2; }
+                        .final-score { font-size: 2rem; font-weight: bold; color: #0056b3; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Performance Report</h1>
+                    <h2>User: ${currentUserName || currentUser}</h2>
+                    <p><strong>Date Range:</strong> ${startDate} to ${endDate}</p>
+                    <table>
+                        <tr><th>Metric</th><th>Value</th></tr>
+                        <tr><td>Total Tasks in Period</td><td>${document.getElementById('totalTasksScore').textContent}</td></tr>
+                        <tr><td>Completed Tasks</td><td>${document.getElementById('completedTasksScore').textContent}</td></tr>
+                        <tr><td>Due But Not Completed</td><td>${document.getElementById('dueNotCompletedScore').textContent}</td></tr>
+                        <tr><td>Completed On Time</td><td>${document.getElementById('onTimeTasksScore').textContent}</td></tr>
+                        <tr><td>Completed Late</td><td>${document.getElementById('notOnTimeScore').textContent}</td></tr>
+                        <tr><td>Revisions Requested</td><td>${document.getElementById('revisionsTakenScore').textContent}</td></tr>
+                        <tr><td>Total Penalty Points</td><td>${document.getElementById('scoresImpactedScore').textContent}</td></tr>
+                        <tr><td><strong>Final Score</strong></td><td class="final-score">${document.getElementById('finalScore').textContent}</td></tr>
+                    </table>
+                </body>
+                </html>
+            `;
+            
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(reportContent);
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => { printWindow.print(); }, 500); // Wait for content to render
+        }
+
+        // Mock function for local testing of scoring data
+        function mockGetScoringData(request) {
+            console.log('Using mock scoring data for request:', request);
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    resolve({
+                        success: true,
+                        data: {
+                            totalTasks: 25,
+                            completedTasks: 22,
+                            dueNotCompleted: 3,
+                            completedOnTime: 18,
+                            completedNotOnTime: 4,
+                            revisionsTaken: 2,
+                            scoresImpacted: (4 * 2) + (2 * 3) + (3 * 5), // 8 + 6 + 15 = 29
+                            finalScore: 71
+                        }
+                    });
+                }, 1000);
+            });
+        }
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        // ✅ Check for auto-login
+        const autoLoginUser = checkAutoLogin();
+        if (autoLoginUser) {
+            currentUser = autoLoginUser;
+            document.getElementById('currentUserDisplay').textContent = currentUser;
+            document.getElementById('loginPage').classList.add('hidden');
+            document.getElementById('dashboardPage').classList.remove('hidden');
+            updateBreadcrumbs('overview');
+             initializeScoringSection();
+            loadDashboard().then(resolveAndDisplayUserName);
+        } else {
+            // Auto-fill demo credentials for testing
+            if (!isGoogleAppsScript) {
+                document.getElementById('userId').value = 'demo';
+                document.getElementById('password').value = 'demo123';
+            }
+        }
+    });
+    </script>
+</body>
+</html>
