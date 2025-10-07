@@ -11,6 +11,7 @@ import ViewAllFMS from './pages/ViewAllFMS';
 import StartProject from './pages/StartProject';
 import Logs from './pages/Logs';
 import UserManagement from './pages/UserManagement';
+import TaskManagement from './pages/TaskManagement';
 
 function App() {
   return (
@@ -76,6 +77,16 @@ function App() {
               <PrivateRoute>
                 <Layout>
                   <UserManagement />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/tasks"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <TaskManagement />
                 </Layout>
               </PrivateRoute>
             }

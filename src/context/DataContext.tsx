@@ -19,7 +19,7 @@ interface DataContextType {
   // User Data
   myTasks: ProjectTask[];
   users: User[];
-  loadMyTasks: () => Promise<void>;
+  loadMyTasks: (username: string) => Promise<void>;
   loadUsers: () => Promise<void>;
   
   // Loading States

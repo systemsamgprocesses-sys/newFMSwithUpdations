@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Workflow, LayoutDashboard, GitBranch, PlayCircle, FileText, List, Users, AlertTriangle } from 'lucide-react';
+import { LogOut, Workflow, LayoutDashboard, GitBranch, PlayCircle, FileText, List, Users, AlertTriangle, ListTodo } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface LayoutProps {
@@ -31,6 +31,7 @@ export default function Layout({ children }: LayoutProps) {
     { path: '/create-fms', label: 'Create FMS', icon: GitBranch },
     { path: '/view-fms', label: 'View FMS', icon: List },
     { path: '/start-project', label: 'Start Project', icon: PlayCircle },
+    { path: '/tasks', label: 'Task Management', icon: ListTodo },
     { path: '/logs', label: 'Logs', icon: FileText },
     { path: '/users', label: 'Users', icon: Users },
   ];

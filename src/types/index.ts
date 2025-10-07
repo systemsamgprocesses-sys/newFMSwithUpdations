@@ -67,4 +67,63 @@ export interface User {
   role: string;
   department: string;
   loginTime?: string;
+  email?: string;
+}
+
+// ===== TASK MANAGEMENT TYPES =====
+
+export interface TaskUser {
+  userId: string;
+  name: string;
+  department: string;
+  email?: string;
+}
+
+export interface TaskData {
+  'Task Id': string;
+  'GIVEN BY': string;
+  'GIVEN TO': string;
+  'GIVEN TO USER ID': string;
+  'TASK DESCRIPTION': string;
+  'HOW TO DO- TUTORIAL LINKS (OPTIONAL)': string;
+  'DEPARTMENT': string;
+  'TASK FREQUENCY': string;
+  'PLANNED DATE': string;
+  'Task Status': string;
+  'completed on': string;
+  'Task Completed On'?: string;
+  'Revision 1 Date'?: string;
+  'Reason for Revision'?: string;
+  'On time or not?'?: string;
+  [key: string]: any;
+}
+
+export interface TaskSummary {
+  upcoming: number;
+  pending: number;
+  completed: number;
+  revisions: number;
+  overdue: number;
+  total: number;
+}
+
+export interface AssignTaskRequest {
+  givenBy: string;
+  assignedTo: string;
+  description: string;
+  plannedDate: string;
+  tutorialLinks?: string;
+  department?: string;
+}
+
+export interface ScoringData {
+  totalTasks: number;
+  completedTasks: number;
+  dueNotCompleted: number;
+  completedOnTime: number;
+  completedNotOnTime: number;
+  revisionsTaken: number;
+  scoresImpacted: number;
+  totalScoreSum: number;
+  finalScore: number;
 }
