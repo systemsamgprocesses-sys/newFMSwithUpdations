@@ -1,26 +1,15 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
-import { CheckCircle, AlertCircle, Info, XCircle, X } from 'lucide-react';
+import { createContext, useContext, ReactNode } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
+import { CheckCircle, AlertCircle, Info, XCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export type AlertType = 'success' | 'error' | 'warning' | 'info';
 
-export interface Alert {
-  id: string;
-  type: AlertType;
-  title?: string;
-  message: string;
-  duration?: number; // Auto-dismiss after this many ms (0 = no auto-dismiss)
-  persistent?: boolean; // If true, won't auto-dismiss
-}
-
 interface AlertContextType {
-  alerts: Alert[];
-  showAlert: (alert: Omit<Alert, 'id'>) => void;
   showSuccess: (message: string, title?: string, duration?: number) => void;
   showError: (message: string, title?: string, duration?: number) => void;
   showWarning: (message: string, title?: string, duration?: number) => void;
   showInfo: (message: string, title?: string, duration?: number) => void;
-  dismissAlert: (id: string) => void;
-  clearAllAlerts: () => void;
 }
 
 const AlertContext = createContext<AlertContextType | undefined>(undefined);
@@ -37,133 +26,153 @@ interface AlertProviderProps {
   children: ReactNode;
 }
 
-export function AlertProvider({ children }: AlertProviderProps) {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-
-  const showAlert = (alert: Omit<Alert, 'id'>) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    const newAlert: Alert = { ...alert, id };
-    
-    setAlerts(prev => [...prev, newAlert]);
-
-    // Auto-dismiss if duration is specified
-    if (alert.duration && alert.duration > 0) {
-      setTimeout(() => {
-        dismissAlert(id);
-      }, alert.duration);
-    }
+// Custom toast component with premium styling
+const CustomToast = ({ 
+  type, 
+  title, 
+  message 
+}: { 
+  type: AlertType; 
+  title?: string; 
+  message: string;
+}) => {
+  const config = {
+    success: {
+      icon: <CheckCircle className="w-5 h-5 text-green-600" />,
+      bgClass: 'bg-gradient-to-r from-green-50 to-emerald-50',
+      borderClass: 'border-green-200',
+      titleClass: 'text-green-900',
+      textClass: 'text-green-800',
+    },
+    error: {
+      icon: <XCircle className="w-5 h-5 text-red-600" />,
+      bgClass: 'bg-gradient-to-r from-red-50 to-rose-50',
+      borderClass: 'border-red-200',
+      titleClass: 'text-red-900',
+      textClass: 'text-red-800',
+    },
+    warning: {
+      icon: <AlertCircle className="w-5 h-5 text-yellow-600" />,
+      bgClass: 'bg-gradient-to-r from-yellow-50 to-amber-50',
+      borderClass: 'border-yellow-200',
+      titleClass: 'text-yellow-900',
+      textClass: 'text-yellow-800',
+    },
+    info: {
+      icon: <Info className="w-5 h-5 text-blue-600" />,
+      bgClass: 'bg-gradient-to-r from-blue-50 to-sky-50',
+      borderClass: 'border-blue-200',
+      titleClass: 'text-blue-900',
+      textClass: 'text-blue-800',
+    },
   };
 
-  const showSuccess = (message: string, title?: string, duration = 5000) => {
-    showAlert({ type: 'success', message, title, duration });
-  };
-
-  const showError = (message: string, title?: string, duration = 0) => {
-    showAlert({ type: 'error', message, title, duration, persistent: true });
-  };
-
-  const showWarning = (message: string, title?: string, duration = 7000) => {
-    showAlert({ type: 'warning', message, title, duration });
-  };
-
-  const showInfo = (message: string, title?: string, duration = 5000) => {
-    showAlert({ type: 'info', message, title, duration });
-  };
-
-  const dismissAlert = (id: string) => {
-    setAlerts(prev => prev.filter(alert => alert.id !== id));
-  };
-
-  const clearAllAlerts = () => {
-    setAlerts([]);
-  };
+  const styles = config[type];
 
   return (
-    <AlertContext.Provider value={{
-      alerts,
-      showAlert,
-      showSuccess,
-      showError,
-      showWarning,
-      showInfo,
-      dismissAlert,
-      clearAllAlerts
-    }}>
-      {children}
-      <AlertContainer />
-    </AlertContext.Provider>
-  );
-}
-
-function AlertContainer() {
-  const { alerts, dismissAlert } = useAlert();
-
-  if (alerts.length === 0) return null;
-
-  return (
-    <div className="fixed top-4 right-4 z-50 space-y-2 max-w-md">
-      {alerts.map(alert => (
-        <AlertItem key={alert.id} alert={alert} onDismiss={() => dismissAlert(alert.id)} />
-      ))}
-    </div>
-  );
-}
-
-function AlertItem({ alert, onDismiss }: { alert: Alert; onDismiss: () => void }) {
-  const getAlertStyles = () => {
-    switch (alert.type) {
-      case 'success':
-        return {
-          container: 'bg-green-50 border-green-200 text-green-800',
-          icon: <CheckCircle className="w-5 h-5 text-green-600" />,
-          title: 'text-green-900'
-        };
-      case 'error':
-        return {
-          container: 'bg-red-50 border-red-200 text-red-800',
-          icon: <XCircle className="w-5 h-5 text-red-600" />,
-          title: 'text-red-900'
-        };
-      case 'warning':
-        return {
-          container: 'bg-yellow-50 border-yellow-200 text-yellow-800',
-          icon: <AlertCircle className="w-5 h-5 text-yellow-600" />,
-          title: 'text-yellow-900'
-        };
-      case 'info':
-        return {
-          container: 'bg-blue-50 border-blue-200 text-blue-800',
-          icon: <Info className="w-5 h-5 text-blue-600" />,
-          title: 'text-blue-900'
-        };
-    }
-  };
-
-  const styles = getAlertStyles();
-
-  return (
-    <div className={`border rounded-lg p-4 shadow-lg animate-in slide-in-from-right-full duration-300 ${styles.container}`}>
+    <motion.div
+      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+      className={`${styles.bgClass} ${styles.borderClass} border-2 rounded-xl shadow-premium p-4 max-w-md backdrop-blur-sm`}
+    >
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 mt-0.5">
           {styles.icon}
         </div>
         <div className="flex-1 min-w-0">
-          {alert.title && (
-            <h4 className={`font-semibold text-sm mb-1 ${styles.title}`}>
-              {alert.title}
+          {title && (
+            <h4 className={`font-semibold text-sm mb-1 ${styles.titleClass}`}>
+              {title}
             </h4>
           )}
-          <p className="text-sm leading-relaxed">
-            {alert.message}
+          <p className={`text-sm leading-relaxed ${styles.textClass}`}>
+            {message}
           </p>
         </div>
-        <button
-          onClick={onDismiss}
-          className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
       </div>
-    </div>
+    </motion.div>
+  );
+};
+
+export function AlertProvider({ children }: AlertProviderProps) {
+  const showSuccess = (message: string, title?: string, duration = 4000) => {
+    toast.custom(
+      (t) => (
+        <AnimatePresence>
+          {t.visible && (
+            <CustomToast type="success" title={title} message={message} />
+          )}
+        </AnimatePresence>
+      ),
+      { duration }
+    );
+  };
+
+  const showError = (message: string, title?: string, duration = 6000) => {
+    toast.custom(
+      (t) => (
+        <AnimatePresence>
+          {t.visible && (
+            <CustomToast type="error" title={title} message={message} />
+          )}
+        </AnimatePresence>
+      ),
+      { duration }
+    );
+  };
+
+  const showWarning = (message: string, title?: string, duration = 5000) => {
+    toast.custom(
+      (t) => (
+        <AnimatePresence>
+          {t.visible && (
+            <CustomToast type="warning" title={title} message={message} />
+          )}
+        </AnimatePresence>
+      ),
+      { duration }
+    );
+  };
+
+  const showInfo = (message: string, title?: string, duration = 4000) => {
+    toast.custom(
+      (t) => (
+        <AnimatePresence>
+          {t.visible && (
+            <CustomToast type="info" title={title} message={message} />
+          )}
+        </AnimatePresence>
+      ),
+      { duration }
+    );
+  };
+
+  return (
+    <AlertContext.Provider
+      value={{
+        showSuccess,
+        showError,
+        showWarning,
+        showInfo,
+      }}
+    >
+      {children}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          className: '',
+          style: {
+            background: 'transparent',
+            boxShadow: 'none',
+            padding: 0,
+          },
+        }}
+        containerStyle={{
+          top: 20,
+          right: 20,
+        }}
+      />
+    </AlertContext.Provider>
   );
 }

@@ -1,9 +1,10 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { User } from '../types';
+import { api } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string) => void;
+  login: (username: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -24,12 +25,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
-  const login = (username: string) => {
-    const newUser = {
-      username,
-      loginTime: new Date().toISOString(),
-    };
-    setUser(newUser);
+  const login = async (username: string) => {
+    try {
+      // First set basic user data
+      const newUser = {
+        username,
+        loginTime: new Date().toISOString(),
+      };
+      setUser(newUser);
+      
+      // Then fetch complete user data including role and department
+      const usersResult = await api.getUsers();
+      if (usersResult.success && usersResult.users) {
+        const userData = usersResult.users.find((u: any) => u.username === username);
+        if (userData) {
+          setUser({
+            username: userData.username,
+            name: userData.name,
+            role: userData.role,
+            department: userData.department,
+            loginTime: new Date().toISOString(),
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      // Keep basic user data even if fetching complete data fails
+    }
   };
 
   const logout = () => {

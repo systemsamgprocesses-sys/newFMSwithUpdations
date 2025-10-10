@@ -4,7 +4,6 @@ import { PlayCircle, Loader } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { api } from '../services/api';
-import { FMSTemplate } from '../types';
 
 export default function StartProject() {
   const { user } = useAuth();
@@ -19,8 +18,16 @@ export default function StartProject() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    loadFMSList();
-  }, [loadFMSList]);
+    if (user && user.role && user.department) {
+      console.log('Loading FMS for user:', user);
+      loadFMSList(user.username, user.role, user.department);
+    } else if (user && !user.role) {
+      console.log('User logged in but role not loaded yet:', user);
+    }
+  }, [loadFMSList, user]);
+
+  // FMS list is now filtered at API level based on user login
+  // No need for client-side filtering anymore
 
 
   const handleSubmit = async (e: React.FormEvent) => {

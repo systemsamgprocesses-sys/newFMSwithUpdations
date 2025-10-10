@@ -32,7 +32,7 @@ export default function Login() {
 
       if (result.success) {
         setSuccess(true);
-        login(username);
+        await login(username);
         setTimeout(() => {
           navigate('/dashboard');
         }, 500);

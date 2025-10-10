@@ -6,7 +6,7 @@ interface DataContextType {
   // FMS Data
   fmsList: any[];
   fmsDetails: Record<string, any>;
-  loadFMSList: () => Promise<void>;
+  loadFMSList: (username?: string, userRole?: string, userDepartment?: string) => Promise<void>;
   loadFMSDetails: (fmsId: string) => Promise<void>;
   
   // Project Data
@@ -62,16 +62,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const projectsLoadedRef = useRef(false);
   const fmsListLoadedRef = useRef(false);
 
-  const loadFMSList = useCallback(async () => {
+  const loadFMSList = useCallback(async (username?: string, userRole?: string, userDepartment?: string) => {
     if (fmsListLoadedRef.current || fmsList.length > 0) return; // Don't reload if already loaded
+    
+    // Debug logging
+    console.log('loadFMSList called with:', { username, userRole, userDepartment });
     
     fmsListLoadedRef.current = true;
     setLoading(prev => ({ ...prev, fmsList: true }));
     try {
-      const result = await api.getAllFMS();
-      if (result.success) {
-        setFmsList(result.fmsList || []);
-      }
+        const result = await api.getAllFMS(username, userRole, userDepartment);
+        if (result.success) {
+          console.log('FMS list loaded:', result.fmsList?.length, 'items');
+          console.log('FMS IDs:', result.fmsList?.map(f => f.fmsId).join(', '));
+          console.log('🔍 Backend Debug Info:', result.debug);
+          setFmsList(result.fmsList || []);
+        }
     } catch (err) {
       setError('Failed to load FMS list');
       fmsListLoadedRef.current = false; // Reset on error

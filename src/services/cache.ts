@@ -1,5 +1,5 @@
 /**
- * Enhanced in-memory cache with TTL, LRU eviction, and smarter invalidation
+ * Enhanced cache with TTL, LRU eviction, localStorage persistence, and smarter invalidation
  * Provides better performance by caching API responses intelligently
  */
 
@@ -14,11 +14,88 @@ interface CacheEntry<T> {
 class CacheService {
   private cache: Map<string, CacheEntry<any>> = new Map();
   private maxSize: number = 100; // Maximum cache entries (LRU eviction)
+  private storageKey: string = 'fms_cache_v1';
+  private persistentKeys: Set<string> = new Set([
+    'getUsers',
+    'getAllFMS',
+    'getTaskUsers',
+    'getAllDepartments'
+  ]); // Keys that should persist across sessions
+  
   private stats = {
     hits: 0,
     misses: 0,
     evictions: 0
   };
+  
+  constructor() {
+    // Load persistent cache from localStorage on initialization
+    this.loadFromStorage();
+    
+    // Save to localStorage periodically
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', () => this.saveToStorage());
+      setInterval(() => this.saveToStorage(), 60000); // Save every minute
+    }
+  }
+  
+  /**
+   * Load cache from localStorage
+   */
+  private loadFromStorage(): void {
+    try {
+      const stored = localStorage.getItem(this.storageKey);
+      if (!stored) return;
+      
+      const parsed = JSON.parse(stored);
+      const now = Date.now();
+      
+      // Only restore non-expired entries
+      Object.entries(parsed).forEach(([key, entry]: [string, any]) => {
+        const age = now - entry.timestamp;
+        if (age < entry.ttl) {
+          this.cache.set(key, entry);
+        }
+      });
+      
+      if (import.meta.env.DEV) {
+        console.log(`✓ Cache restored: ${this.cache.size} entries from localStorage`);
+      }
+    } catch (err) {
+      console.warn('Failed to load cache from localStorage:', err);
+      localStorage.removeItem(this.storageKey);
+    }
+  }
+  
+  /**
+   * Save persistent cache entries to localStorage
+   */
+  private saveToStorage(): void {
+    try {
+      const toStore: Record<string, CacheEntry<any>> = {};
+      
+      // Only save entries with persistent keys
+      for (const [key, entry] of this.cache.entries()) {
+        const shouldPersist = Array.from(this.persistentKeys).some(pattern => 
+          key.includes(pattern)
+        );
+        
+        if (shouldPersist) {
+          toStore[key] = entry;
+        }
+      }
+      
+      if (Object.keys(toStore).length > 0) {
+        localStorage.setItem(this.storageKey, JSON.stringify(toStore));
+        
+        if (import.meta.env.DEV) {
+          console.log(`✓ Cache saved: ${Object.keys(toStore).length} persistent entries to localStorage`);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to save cache to localStorage:', err);
+    }
+  }
   
   /**
    * Set cache entry with TTL in milliseconds
@@ -37,6 +114,15 @@ class CacheService {
       hits: 0,
       lastAccessed: Date.now()
     });
+    
+    // Save to localStorage if this is a persistent key
+    const shouldPersist = Array.from(this.persistentKeys).some(pattern => 
+      key.includes(pattern)
+    );
+    
+    if (shouldPersist) {
+      this.saveToStorage();
+    }
   }
   
   /**
@@ -95,10 +181,18 @@ class CacheService {
   }
   
   /**
-   * Clear all cache entries
+   * Clear all cache entries (including localStorage)
    */
   clearAll(): void {
     this.cache.clear();
+    try {
+      localStorage.removeItem(this.storageKey);
+      if (import.meta.env.DEV) {
+        console.log('✓ Cache cleared from memory and localStorage');
+      }
+    } catch (err) {
+      console.warn('Failed to clear localStorage cache:', err);
+    }
   }
   
   /**
@@ -127,6 +221,15 @@ class CacheService {
     }
     
     keysToDelete.forEach(key => this.cache.delete(key));
+    
+    // Update localStorage if persistent keys were deleted
+    const hasPersistentKeys = keysToDelete.some(key => 
+      Array.from(this.persistentKeys).some(p => key.includes(p))
+    );
+    
+    if (hasPersistentKeys) {
+      this.saveToStorage();
+    }
   }
   
   /**
@@ -160,6 +263,32 @@ class CacheService {
    */
   has(key: string): boolean {
     return this.cache.has(key) && this.get(key) !== null;
+  }
+  
+  /**
+   * Get cache size in bytes (approximate)
+   */
+  getSize(): number {
+    try {
+      const stored = localStorage.getItem(this.storageKey);
+      return stored ? new Blob([stored]).size : 0;
+    } catch {
+      return 0;
+    }
+  }
+  
+  /**
+   * Add a key pattern to persist across sessions
+   */
+  addPersistentKey(pattern: string): void {
+    this.persistentKeys.add(pattern);
+  }
+  
+  /**
+   * Remove a key pattern from persistent storage
+   */
+  removePersistentKey(pattern: string): void {
+    this.persistentKeys.delete(pattern);
   }
 }
 

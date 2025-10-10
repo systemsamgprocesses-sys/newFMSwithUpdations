@@ -30,14 +30,14 @@ const getCacheTTL = (action: string): number => {
   return 300000;
 };
 
-async function callAppsScript(action: string, payload: Record<string, any> = {}, retries = 3, useCache = false) {
+async function callAppsScript(action: string, payload: Record<string, any> = {}, retries = 3, useCache = false, customCacheKey?: string) {
   // Check cache for read operations
-  const cacheKey = `${action}:${JSON.stringify(payload)}`;
+  const cacheKey = customCacheKey || `${action}:${JSON.stringify(payload)}`;
   if (useCache) {
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
       if (import.meta.env.DEV) {
-        console.log('✓ Cache hit:', action);
+        console.log('✓ Cache hit:', action, customCacheKey ? '(custom key)' : '');
       }
       return cachedData;
     }
@@ -160,8 +160,13 @@ export const api = {
     return callAppsScript('createFMS', { fmsName, steps, username });
   },
 
-  async getAllFMS() {
-    return callAppsScript('getAllFMS', {}, 3, true); // Use cache
+  async getAllFMS(username?: string, userRole?: string, userDepartment?: string) {
+    const cacheKey = `getAllFMS:${username || 'anonymous'}:${userRole || 'none'}:${userDepartment || 'none'}`;
+    return callAppsScript('getAllFMS', { 
+      username, 
+      userRole, 
+      userDepartment 
+    }, 3, false, cacheKey); // Disable cache temporarily for debugging
   },
 
   async getFMSById(fmsId: string) {
@@ -250,7 +255,7 @@ export const api = {
     cache.invalidatePattern('getTaskSummary');
     cache.invalidatePattern('getAllLogs');
     cache.invalidatePattern('getScoringData');
-    return callAppsScript('updateTask', { taskId, action, extraData });
+    return callAppsScript('updateTask', { taskId, taskAction: action, extraData });
   },
 
   // Batch update multiple tasks

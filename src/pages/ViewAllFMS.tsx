@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GitBranch, Loader, Eye, Plus } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { api } from '../services/api';
@@ -13,8 +14,16 @@ export default function ViewAllFMS() {
   const [expandedFMS, setExpandedFMS] = useState<string | null>(null);
 
   useEffect(() => {
-    loadFMSList();
-  }, [loadFMSList]);
+    if (user && user.role && user.department) {
+      console.log('Loading FMS for user:', user);
+      loadFMSList(user.username, user.role, user.department);
+    } else if (user && !user.role) {
+      console.log('User logged in but role not loaded yet:', user);
+    }
+  }, [loadFMSList, user]);
+
+  // FMS list is now filtered at API level based on user login
+  // No need for client-side filtering anymore
 
   const handleFMSDetails = async (fmsId: string) => {
     if (fmsDetails[fmsId]) {
@@ -66,11 +75,31 @@ export default function ViewAllFMS() {
 
   if (loading.fmsList) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="bg-white rounded-xl shadow-lg p-8 flex items-center justify-center">
-          <Loader className="w-8 h-8 animate-spin text-slate-600" />
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="w-full px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-6"
+      >
+        <div className="card-premium p-4 sm:p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div className="skeleton h-8 w-64 rounded-lg" />
+            <div className="skeleton h-10 w-32 rounded-lg" />
+          </div>
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="border border-slate-200 rounded-lg p-4">
+                <div className="skeleton h-6 w-3/4 mb-3" />
+                <div className="skeleton h-4 w-1/2 mb-2" />
+                <div className="flex gap-4">
+                  <div className="skeleton h-3 w-16" />
+                  <div className="skeleton h-3 w-24" />
+                  <div className="skeleton h-3 w-20" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 

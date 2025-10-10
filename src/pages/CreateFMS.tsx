@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Save, GitBranch, CheckSquare, X, Upload as UploadIcon } from 'lucide-react';
+import { Plus, Trash2, Save, GitBranch, CheckSquare, X, Loader } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import { useAlert } from '../context/AlertContext';
 import { api } from '../services/api';
 import { FMSStep, User, ChecklistItem } from '../types';
 import mermaid from 'mermaid';
@@ -11,6 +13,7 @@ mermaid.initialize({ startOnLoad: false, theme: 'default' });
 
 export default function CreateFMS() {
   const { user } = useAuth();
+  const { showSuccess, showError } = useAlert();
   const navigate = useNavigate();
   const [fmsName, setFmsName] = useState('');
   const [steps, setSteps] = useState<FMSStep[]>([
@@ -28,7 +31,7 @@ export default function CreateFMS() {
     },
   ]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [showDiagram, setShowDiagram] = useState(false);
   const [diagramSvg, setDiagramSvg] = useState('');
   const [users, setUsers] = useState<User[]>([]);
@@ -186,10 +189,9 @@ graph LR
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
 
     if (!fmsName.trim()) {
-      setError('Please enter FMS name');
+      showError('Please enter FMS name');
       return;
     }
 
@@ -198,7 +200,7 @@ graph LR
     );
 
     if (hasEmptyFields) {
-      setError('Please fill in all step fields');
+      showError('Please fill in all step fields');
       return;
     }
 
@@ -210,7 +212,7 @@ graph LR
     );
 
     if (hasEmptyChecklists) {
-      setError('Please add at least one checklist item for steps that require checklists');
+      showError('Please add at least one checklist item for steps that require checklists');
       return;
     }
 
@@ -221,12 +223,14 @@ graph LR
       const hasPendingUploads = Object.values(pendingUploads).some(pending => pending === true);
       
       if (hasPendingUploads) {
+        setLoadingMessage('Uploading files to Google Drive...');
         setUploadProgress('📤 Uploading files to Google Drive...');
         
         // Upload all pending files
         for (let i = 0; i < steps.length; i++) {
           const uploadRef = fileUploadRefs.current[i];
           if (uploadRef && uploadRef.hasPendingFiles()) {
+            setLoadingMessage(`Uploading files for Step ${i + 1}...`);
             setUploadProgress(`📤 Uploading files for Step ${i + 1}...`);
             
             try {
@@ -241,9 +245,12 @@ graph LR
           }
         }
         
+        setLoadingMessage('All files uploaded! Creating FMS...');
         setUploadProgress('✅ All files uploaded! Saving FMS...');
         // Small delay to show success message
         await new Promise(resolve => setTimeout(resolve, 500));
+      } else {
+        setLoadingMessage('Creating FMS template...');
       }
 
       // Save the FMS
@@ -251,25 +258,39 @@ graph LR
 
       if (result.success) {
         setUploadProgress('');
-        navigate('/dashboard');
+        showSuccess('FMS template created successfully!');
+        setTimeout(() => navigate('/dashboard'), 1000);
       } else {
-        setError(result.message || 'Failed to create FMS');
+        showError(result.message || 'Failed to create FMS');
       }
     } catch (err: any) {
-      setError(err.message || 'Connection error. Please try again.');
+      showError(err.message || 'Connection error. Please try again.');
       setUploadProgress('');
     } finally {
       setLoading(false);
+      setLoadingMessage('');
     }
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6">
-      <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 mb-4 sm:mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
-          <GitBranch className="w-6 h-6 sm:w-8 sm:h-8" />
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="max-w-6xl mx-auto p-4 sm:p-6"
+    >
+      <div className="card-premium p-4 sm:p-6 mb-4 sm:mb-6">
+        <motion.h1
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2 }}
+          className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3"
+        >
+          <div className="p-2 bg-gradient-to-br from-accent-500 to-brand-500 rounded-xl">
+            <GitBranch className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+          </div>
           Create FMS Template
-        </h1>
+        </motion.h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -546,51 +567,69 @@ graph LR
             ))}
           </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-sm sm:text-base">
-              {error}
-            </div>
-          )}
-
-          {uploadProgress && (
-            <div className="bg-blue-50 border border-blue-200 text-blue-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-sm sm:text-base flex items-center gap-2">
-              <UploadIcon className="w-5 h-5 animate-pulse" />
-              <span>{uploadProgress}</span>
-            </div>
-          )}
+          <AnimatePresence>
+            {uploadProgress && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="bg-gradient-to-r from-blue-50 to-sky-50 border-2 border-blue-200 text-blue-800 px-3 sm:px-4 py-3 rounded-xl text-sm sm:text-base flex items-center gap-3 shadow-lg"
+              >
+                <Loader className="w-5 h-5 animate-spin" />
+                <span className="font-medium">{uploadProgress}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               type="button"
               onClick={() => setShowDiagram(!showDiagram)}
               disabled={!steps.every(s => s.what)}
-              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+              className="btn-premium flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white rounded-xl hover:shadow-glow transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base shadow-lg"
             >
               <GitBranch className="w-4 h-4 sm:w-5 sm:h-5" />
               {showDiagram ? 'Hide' : 'Show'} Flowchart
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={loading}
-              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+              className="btn-premium flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-accent-600 to-brand-600 text-white rounded-xl hover:shadow-glow transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base shadow-lg"
             >
-              <Save className="w-4 h-4 sm:w-5 sm:h-5" />
-              {loading ? 'Saving...' : 'Save FMS Template'}
-            </button>
+              {loading ? (
+                <>
+                  <Loader className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                  {loadingMessage || 'Saving...'}
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 sm:w-5 sm:h-5" />
+                  Save FMS Template
+                </>
+              )}
+            </motion.button>
           </div>
         </form>
       </div>
 
       {showDiagram && diagramSvg && (
-        <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-xl shadow-lg p-4 sm:p-6"
+        >
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-3 sm:mb-4">Flow Diagram</h2>
           <div
             className="flex justify-center overflow-x-auto"
             dangerouslySetInnerHTML={{ __html: diagramSvg }}
           />
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }

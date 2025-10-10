@@ -3,6 +3,36 @@
 // Google Apps Script Web App Backend
 // Enhanced Version with ALL Features
 // ============================================
+//
+// 🔧 SETUP & TROUBLESHOOTING:
+// ---------------------------
+// If Task Management features are not working (assign, complete, revise):
+//
+// 1. Open Google Apps Script Editor
+// 2. Run: initializeAllSheets()
+//    - This creates all required sheets with proper structure
+//    - Creates MASTER sheet for assigned tasks
+//    - Creates SCORING sheet for performance tracking
+//
+// 3. Run: checkSystemHealth()
+//    - Verifies all sheets exist
+//    - Shows detailed diagnostics
+//    - Highlights any missing components
+//
+// 4. If issues persist, check:
+//    - MASTER_SHEET_ID is correct
+//    - You have edit permissions on all sheets
+//    - No sheet name conflicts
+//
+// 🔍 WHAT WAS FIXED:
+// ------------------
+// 1. Created MASTER sheet auto-generation for Task Management
+// 2. Fixed sheet name inconsistencies (MASTER vs Task Management)
+// 3. Added proper column structure (19 columns including attachments)
+// 4. Added validation and better error messages
+// 5. Fixed objection review functions to use correct sheet
+//
+// ============================================
 
 // ===== CONFIGURATION =====
 // Replace these IDs with your actual Google Sheets IDs
@@ -13,6 +43,147 @@ const CREDENTIALS_SHEET_ID = '1ipCXOWo1A8w3sbmhaQcrhFHaCPgaHaHWR6Wr-MPDZ14';
 const FMS_SS = SpreadsheetApp.getActiveSpreadsheet();
 
 // ===== SHEET AUTO-CREATION =====
+
+/**
+ * Manual initialization function - Run this from Apps Script Editor
+ * to create all required sheets with proper structure
+ */
+function initializeAllSheets() {
+  Logger.log('🔧 Initializing all sheets...');
+  const result = ensureSheetsExist();
+  Logger.log(result.message);
+  return result;
+}
+
+/**
+ * Diagnostic function to check system health
+ * Run this from Apps Script Editor to verify all sheets exist
+ */
+function checkSystemHealth() {
+  Logger.log('🔍 Checking system health...\n');
+  
+  const results = {
+    fmsSpreadsheet: false,
+    fmsMaster: false,
+    fmsProgress: false,
+    users: false,
+    objections: false,
+    fmsRevisions: false,
+    fileUploadsLog: false,
+    masterSheetAccess: false,
+    masterSheet: false,
+    scoringSheet: false,
+    credentialsAccess: false,
+    overall: false
+  };
+  
+  // Check FMS Spreadsheet
+  try {
+    const fmsName = FMS_SS.getName();
+    Logger.log('✅ FMS Spreadsheet: ' + fmsName);
+    results.fmsSpreadsheet = true;
+    
+    // Check FMS sheets
+    if (FMS_SS.getSheetByName('FMS_MASTER')) {
+      Logger.log('✅ FMS_MASTER sheet exists');
+      results.fmsMaster = true;
+    } else {
+      Logger.log('❌ FMS_MASTER sheet missing');
+    }
+    
+    if (FMS_SS.getSheetByName('FMS_PROGRESS')) {
+      Logger.log('✅ FMS_PROGRESS sheet exists');
+      results.fmsProgress = true;
+    } else {
+      Logger.log('❌ FMS_PROGRESS sheet missing');
+    }
+    
+    if (FMS_SS.getSheetByName('Users')) {
+      Logger.log('✅ Users sheet exists');
+      results.users = true;
+    } else {
+      Logger.log('❌ Users sheet missing');
+    }
+    
+    if (FMS_SS.getSheetByName('OBJECTIONS')) {
+      Logger.log('✅ OBJECTIONS sheet exists');
+      results.objections = true;
+    } else {
+      Logger.log('❌ OBJECTIONS sheet missing');
+    }
+    
+    if (FMS_SS.getSheetByName('FMS_REVISIONS')) {
+      Logger.log('✅ FMS_REVISIONS sheet exists');
+      results.fmsRevisions = true;
+    } else {
+      Logger.log('❌ FMS_REVISIONS sheet missing');
+    }
+    
+    if (FMS_SS.getSheetByName('FILE_UPLOADS_LOG')) {
+      Logger.log('✅ FILE_UPLOADS_LOG sheet exists');
+      results.fileUploadsLog = true;
+    } else {
+      Logger.log('❌ FILE_UPLOADS_LOG sheet missing');
+    }
+  } catch (e) {
+    Logger.log('❌ Error accessing FMS Spreadsheet: ' + e.toString());
+  }
+  
+  // Check MASTER_SHEET (Task Management)
+  try {
+    const masterSS = SpreadsheetApp.openById(MASTER_SHEET_ID);
+    const masterName = masterSS.getName();
+    Logger.log('\n✅ MASTER_SHEET Spreadsheet accessible: ' + masterName);
+    results.masterSheetAccess = true;
+    
+    if (masterSS.getSheetByName('MASTER')) {
+      const sheet = masterSS.getSheetByName('MASTER');
+      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      Logger.log('✅ MASTER sheet exists with ' + headers.length + ' columns');
+      Logger.log('   Headers: ' + headers.join(', '));
+      results.masterSheet = true;
+    } else {
+      Logger.log('❌ MASTER sheet missing');
+    }
+    
+    if (masterSS.getSheetByName('SCORING')) {
+      Logger.log('✅ SCORING sheet exists');
+      results.scoringSheet = true;
+    } else {
+      Logger.log('❌ SCORING sheet missing');
+    }
+  } catch (e) {
+    Logger.log('❌ Error accessing MASTER_SHEET: ' + e.toString());
+    Logger.log('   Please check MASTER_SHEET_ID in configuration');
+  }
+  
+  // Check Credentials
+  try {
+    const credSS = SpreadsheetApp.openById(CREDENTIALS_SHEET_ID);
+    const credName = credSS.getName();
+    Logger.log('\n✅ Credentials Spreadsheet accessible: ' + credName);
+    results.credentialsAccess = true;
+  } catch (e) {
+    Logger.log('❌ Error accessing Credentials: ' + e.toString());
+  }
+  
+  // Overall status
+  const totalChecks = Object.keys(results).length - 1; // Exclude 'overall'
+  const passedChecks = Object.values(results).filter(v => v === true).length;
+  results.overall = passedChecks === totalChecks;
+  
+  Logger.log('\n' + '='.repeat(50));
+  Logger.log('System Health: ' + passedChecks + '/' + totalChecks + ' checks passed');
+  
+  if (results.overall) {
+    Logger.log('✅ All systems operational!');
+  } else {
+    Logger.log('⚠️  Some issues detected. Run initializeAllSheets() to create missing sheets.');
+  }
+  Logger.log('='.repeat(50));
+  
+  return results;
+}
 
 /**
  * Ensure all required sheets exist with proper structure
@@ -93,6 +264,41 @@ function ensureSheetsExist() {
     Logger.log('✓ Created FILE_UPLOADS_LOG sheet');
   }
   
+  // 7. MASTER sheet (for Task Management Assigned Tasks) - Create in MASTER_SHEET
+  try {
+    const masterSheetSS = SpreadsheetApp.openById(MASTER_SHEET_ID);
+    let masterSheet = masterSheetSS.getSheetByName('MASTER');
+    if (!masterSheet) {
+      masterSheet = masterSheetSS.insertSheet('MASTER');
+      masterSheet.appendRow([
+        'Task Id', 'GIVEN BY', 'GIVEN TO', 'GIVEN TO USER ID', 
+        'TASK DESCRIPTION', 'HOW TO DO- TUTORIAL LINKS (OPTIONAL)', 
+        'DEPARTMENT', 'TASK FREQUENCY', 'PLANNED DATE', 'Task Status',
+        'completed on', 'Task Completed On', 'Revision 1 Date', 
+        'Reason for Revision', 'On time or not?', 'Revision Count',
+        'Revision Penalty', 'Calculated Score', 'Attachments'
+      ]);
+      Logger.log('✓ Created MASTER sheet for Task Management');
+    }
+    
+    // 8. SCORING sheet (for performance tracking) - Create in MASTER_SHEET
+    let scoringSheet = masterSheetSS.getSheetByName('SCORING');
+    if (!scoringSheet) {
+      scoringSheet = masterSheetSS.insertSheet('SCORING');
+      scoringSheet.appendRow([
+        'Task Id', 'GIVEN BY', 'GIVEN TO', 'GIVEN TO USER ID', 
+        'TASK DESCRIPTION', 'HOW TO DO- TUTORIAL LINKS (OPTIONAL)', 
+        'DEPARTMENT', 'TASK FREQUENCY', 'PLANNED DATE', 'Task Status',
+        'completed on', 'Task Completed On', 'Revision 1 Date', 
+        'Reason for Revision', 'On time or not?', 'Revision Count',
+        'Revision Penalty', 'Calculated Score', 'Attachments'
+      ]);
+      Logger.log('✓ Created SCORING sheet for Task Management');
+    }
+  } catch (e) {
+    Logger.log('Warning: Could not access MASTER_SHEET: ' + e.toString());
+  }
+  
   Logger.log('✅ All sheets verified/created!');
   return { success: true, message: 'All sheets ready' };
 }
@@ -148,7 +354,7 @@ function doPost(e) {
         result = createFMS(params);
         break;
       case 'getAllFMS':
-        result = getAllFMS();
+        result = getAllFMS(params);
         break;
       case 'getFMSById':
         result = getFMSById(params.fmsId);
@@ -183,7 +389,7 @@ function doPost(e) {
         result = getTaskSummary(params.userId);
         break;
       case 'updateTask':
-        result = updateTask(params.taskId, params.action, params.extraData || {});
+        result = updateTask(params.taskId, params.taskAction, params.extraData || {});
         break;
       case 'batchUpdateTasks':
         result = batchUpdateTasks(params.updates);
@@ -598,12 +804,45 @@ function createFMS(params) {
   }
 }
 
-function getAllFMS() {
+// Helper function to get users in a specific department
+function getDepartmentUsers(department) {
+  try {
+    const usersSheet = FMS_SS.getSheetByName('Users');
+    if (!usersSheet) {
+      return [];
+    }
+    
+    const data = usersSheet.getDataRange().getValues();
+    if (data.length <= 1) {
+      return [];
+    }
+    
+    const departmentUsers = [];
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (row[4] === department) { // department column (index 4)
+        departmentUsers.push(row[0]); // username column (index 0)
+      }
+    }
+    
+    return departmentUsers;
+  } catch (error) {
+    Logger.log('Error getting department users: ' + error.toString());
+    return [];
+  }
+}
+
+function getAllFMS(params = {}) {
   try {
     const masterSheet = FMS_SS.getSheetByName('FMS_MASTER');
     if (!masterSheet) {
       return { success: false, message: 'FMS_MASTER sheet not found' };
     }
+    
+    const { username, userRole, userDepartment } = params;
+    
+    // Log the received parameters for debugging
+    Logger.log(`getAllFMS called with params: username=${username}, userRole=${userRole}, userDepartment=${userDepartment}`);
     
     const data = masterSheet.getDataRange().getValues();
     if (data.length <= 1) {
@@ -656,9 +895,92 @@ function getAllFMS() {
       }
     });
     
+    // Apply role-based filtering
+    let filteredFmsList = Object.values(fmsMap);
+    Logger.log(`Total FMS found before filtering: ${filteredFmsList.length}`);
+    
+    if (username && userRole) {
+      const role = userRole.toLowerCase();
+      
+      // Log filtering details
+      Logger.log(`Filtering FMS for user: ${username}, role: ${role}, department: ${userDepartment}`);
+      
+      if (role === 'superadmin' || role === 'super admin') {
+        // Super Admin sees everything - no filtering
+        Logger.log('User is Super Admin - showing all FMS');
+        filteredFmsList = Object.values(fmsMap);
+      } else if (role === 'admin') {
+        // Admin sees FMS where users in their department are assigned (WHO column)
+        // First, get all users in the admin's department
+        const departmentUsers = getDepartmentUsers(userDepartment);
+        Logger.log(`Admin department users: ${departmentUsers.join(', ')}`);
+        
+        filteredFmsList = Object.values(fmsMap).filter(fms => {
+          // Get all steps for this FMS to check WHO assignments
+          const fmsSteps = data.filter(row => row[0] === fms.fmsId);
+          
+          // Check if any step is assigned to someone in admin's department
+          const hasDepartmentAssignment = fmsSteps.some(step => {
+            const who = step[4]; // WHO column (index 4)
+            // Check if the assigned person is in admin's department
+            const isDepartmentUser = departmentUsers.includes(who);
+            if (isDepartmentUser) {
+              Logger.log(`FMS ${fms.fmsId} assigned to department user: ${who}`);
+            }
+            return isDepartmentUser;
+          });
+          
+          return hasDepartmentAssignment;
+        });
+      } else {
+        // Regular users see only FMS where they are assigned (WHO column)
+        Logger.log('User is Regular User - filtering by WHO assignments');
+        filteredFmsList = Object.values(fmsMap).filter(fms => {
+          // Get all steps for this FMS to check WHO assignments
+          const fmsSteps = data.filter(row => row[0] === fms.fmsId);
+          
+          // Debug: Log all WHO assignments for this FMS
+          Logger.log(`Checking FMS ${fms.fmsId} (${fms.fmsName})`);
+          fmsSteps.forEach((step, index) => {
+            Logger.log(`  Step ${index + 1} WHO: "${step[4]}"`);
+          });
+          
+          // Check if user is assigned to any step in this FMS
+          const hasUserAssignment = fmsSteps.some(step => {
+            const who = step[4]; // WHO column (index 4)
+            const isAssigned = who === username;
+            Logger.log(`  Comparing WHO="${who}" with username="${username}": ${isAssigned}`);
+            if (isAssigned) {
+              Logger.log(`✓ FMS ${fms.fmsId} assigned to user: ${username}`);
+            }
+            return isAssigned;
+          });
+          
+          Logger.log(`  Result for ${fms.fmsId}: ${hasUserAssignment ? 'INCLUDE' : 'EXCLUDE'}`);
+          return hasUserAssignment;
+        });
+      }
+    } else {
+      Logger.log('No username or userRole provided - showing all FMS (no filtering)');
+    }
+    
+    Logger.log(`Final filtered FMS list for ${username || 'anonymous'}: ${filteredFmsList.length} FMS found`);
+    filteredFmsList.forEach(fms => {
+      Logger.log(`- FMS: ${fms.fmsName} (${fms.fmsId})`);
+    });
+    
+    // Add debug info to response
+    const debugInfo = {
+      totalFmsCount: Object.values(fmsMap).length,
+      filteredCount: filteredFmsList.length,
+      userInfo: { username, userRole, userDepartment },
+      expectedFms: ['FMS1759827022663', 'FMS1759901828599', 'FMS1759906890858', 'FMS1759922726457']
+    };
+    
     return {
       success: true,
-      fmsList: Object.values(fmsMap)
+      fmsList: filteredFmsList,
+      debug: debugInfo
     };
   } catch (error) {
     Logger.log('Error getting all FMS: ' + error.toString());
@@ -1469,8 +1791,22 @@ function getTaskUsers() {
  */
 function assignTask(taskData) {
   try {
+    // Validate required fields
+    if (!taskData.assignedTo) {
+      return { success: false, message: 'Assigned To user is required' };
+    }
+    if (!taskData.description) {
+      return { success: false, message: 'Task description is required' };
+    }
+    if (!taskData.plannedDate) {
+      return { success: false, message: 'Planned date is required' };
+    }
+    
     const sheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('MASTER');
-    if (!sheet) throw new Error('MASTER sheet not found');
+    if (!sheet) {
+      Logger.log('ERROR: MASTER sheet not found. Please run initializeAllSheets() function.');
+      return { success: false, message: 'MASTER sheet not found. Please contact administrator.' };
+    }
     
     const lastRow = sheet.getLastRow();
     
@@ -1487,25 +1823,25 @@ function assignTask(taskData) {
     const formattedDate = formatDateForSheet(plannedDate);
     
     const newRow = [
-      nextTaskId,
-      taskData.givenBy || '',
-      taskData.assignedTo || '',
-      taskData.assignedTo || '',
-      taskData.description || '',
-      taskData.tutorialLinks || '',
-      taskData.department || '',
-      'One Time Only',
-      formattedDate,
-      'Pending',
-      '', '',
-      '',
-      '', '', '',
-      '',
-      0,
-      '',
-      '',
-      '',
-      JSON.stringify(taskData.attachments || [])  // Attachments column
+      nextTaskId,                                    // 1. Task Id
+      taskData.givenBy || '',                        // 2. GIVEN BY
+      taskData.assignedTo || '',                     // 3. GIVEN TO
+      taskData.assignedTo || '',                     // 4. GIVEN TO USER ID
+      taskData.description || '',                    // 5. TASK DESCRIPTION
+      taskData.tutorialLinks || '',                  // 6. HOW TO DO- TUTORIAL LINKS
+      taskData.department || '',                     // 7. DEPARTMENT
+      'One Time Only',                               // 8. TASK FREQUENCY
+      formattedDate,                                 // 9. PLANNED DATE
+      'Pending',                                     // 10. Task Status
+      '',                                            // 11. completed on
+      '',                                            // 12. Task Completed On
+      '',                                            // 13. Revision 1 Date
+      '',                                            // 14. Reason for Revision
+      '',                                            // 15. On time or not?
+      0,                                             // 16. Revision Count
+      '',                                            // 17. Revision Penalty
+      '',                                            // 18. Calculated Score
+      JSON.stringify(taskData.attachments || [])     // 19. Attachments
     ];
     
     sheet.appendRow(newRow);
@@ -1603,7 +1939,10 @@ function assignTask(taskData) {
 function getTasks(userId, filter) {
   try {
     const sheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('MASTER');
-    if (!sheet) throw new Error('MASTER sheet not found');
+    if (!sheet) {
+      Logger.log('ERROR: MASTER sheet not found. Please run initializeAllSheets() function.');
+      return { success: false, message: 'MASTER sheet not found. Please contact administrator.', tasks: [] };
+    }
     
     const data = sheet.getDataRange().getValues();
     if (data.length <= 1) return { success: true, tasks: [] };
@@ -1714,7 +2053,10 @@ function getTaskSummary(userId) {
 function updateTask(taskId, action, extraData) {
   try {
     const sheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('MASTER');
-    if (!sheet) throw new Error('MASTER sheet not found');
+    if (!sheet) {
+      Logger.log('ERROR: MASTER sheet not found. Please run initializeAllSheets() function.');
+      return { success: false, message: 'MASTER sheet not found. Please contact administrator.' };
+    }
     
     const data = sheet.getDataRange().getValues();
     const headers = data[0].map(h => (h || '').toString().trim());
@@ -2493,8 +2835,8 @@ function reviewObjection(params) {
           }
         }
       } else {
-        // Update Task Management sheet
-        const taskSheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('Task Management');
+        // Update Task Management MASTER sheet
+        const taskSheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('MASTER');
         if (taskSheet) {
           const taskData = taskSheet.getDataRange().getValues();
           for (let i = 1; i < taskData.length; i++) {
@@ -2547,7 +2889,7 @@ function reviewObjection(params) {
         }
       } else {
         // Handle Task Management replacement
-        const taskSheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('Task Management');
+        const taskSheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('MASTER');
         if (taskSheet) {
           const taskData = taskSheet.getDataRange().getValues();
           for (let i = 1; i < taskData.length; i++) {
@@ -2571,7 +2913,11 @@ function reviewObjection(params) {
                 '', // Task Completed On
                 '', // Revision 1 Date
                 '', // Reason for Revision
-                '' // On time or not
+                '', // On time or not
+                0, // Revision Count
+                '', // Revision Penalty
+                '', // Calculated Score
+                '' // Attachments
               ]);
               break;
             }
@@ -2603,8 +2949,8 @@ function reviewObjection(params) {
           }
         }
       } else {
-        // Update Task Management sheet
-        const taskSheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('Task Management');
+        // Update Task Management MASTER sheet
+        const taskSheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('MASTER');
         if (taskSheet) {
           const taskData = taskSheet.getDataRange().getValues();
           for (let i = 1; i < taskData.length; i++) {

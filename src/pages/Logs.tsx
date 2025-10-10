@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { FileText, Loader, GitBranch, PlayCircle, CheckCircle } from 'lucide-react';
+import { FileText, GitBranch, PlayCircle, CheckCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { api } from '../services/api';
 import { Log } from '../types';
+import { SkeletonList } from '../components/SkeletonLoader';
 
 export default function Logs() {
   const [logs, setLogs] = useState<Log[]>([]);
@@ -101,21 +103,65 @@ export default function Logs() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto p-6">
-        <div className="bg-white rounded-xl shadow-lg p-8 flex items-center justify-center">
-          <Loader className="w-8 h-8 animate-spin text-slate-600" />
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="w-full px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-6"
+      >
+        <div className="card-premium p-4 sm:p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-gradient-to-br from-accent-500 to-brand-500 rounded-xl">
+              <div className="w-5 h-5 bg-white/20 rounded"></div>
+            </div>
+            <div className="skeleton h-8 w-48 rounded-lg" />
+          </div>
+          <div className="space-y-3 sm:space-y-4">
+            {[...Array(8)].map((_, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="border-2 rounded-xl p-3 sm:p-4 bg-gradient-to-r from-slate-50 to-blue-50 border-slate-200"
+              >
+                <div className="flex items-start gap-2 sm:gap-4">
+                  <div className="mt-0.5 sm:mt-1 flex-shrink-0">
+                    <div className="skeleton w-5 h-5 rounded-full" />
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="skeleton h-4 w-3/4 rounded-lg" />
+                    <div className="skeleton h-3 w-full rounded-lg" />
+                    <div className="skeleton h-3 w-1/2 rounded-lg" />
+                  </div>
+                  <div className="skeleton h-3 w-16 rounded-lg hidden sm:block" />
+                </div>
+              </motion.div>
+            ))}
+          </div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6">
-      <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
-          <FileText className="w-6 h-6 sm:w-8 sm:h-8" />
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="w-full px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-6"
+    >
+      <div className="card-premium p-4 sm:p-6">
+        <motion.h1
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.1 }}
+          className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3"
+        >
+          <div className="p-2 bg-gradient-to-br from-accent-500 to-brand-500 rounded-xl">
+            <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+          </div>
           Activity Logs
-        </h1>
+        </motion.h1>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
@@ -131,9 +177,12 @@ export default function Logs() {
         ) : (
           <div className="space-y-3 sm:space-y-4">
             {logs.map((log, index) => (
-              <div
+              <motion.div
                 key={index}
-                className={`border rounded-lg p-3 sm:p-4 ${getLogColor(log.type)} hover:shadow-md transition-shadow`}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className={`border-2 rounded-xl p-3 sm:p-4 ${getLogColor(log.type)} hover:shadow-lg transition-all`}
               >
                 <div className="flex items-start gap-2 sm:gap-4">
                   <div className="mt-0.5 sm:mt-1 flex-shrink-0">{getLogIcon(log.type)}</div>
@@ -154,11 +203,11 @@ export default function Logs() {
                     {log.type.replace('_', ' ')}
                   </div>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

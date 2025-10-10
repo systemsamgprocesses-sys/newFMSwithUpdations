@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckSquare, Loader, Calendar, ListChecks, AlertCircle, TrendingUp, Target, X, Edit, Paperclip, ExternalLink, CheckCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useAlert } from '../context/AlertContext';
 import { api } from '../services/api';
 import { ProjectTask, TaskData } from '../types';
+import { SkeletonDashboard } from '../components/SkeletonLoader';
 
 interface UnifiedTask {
   id: string;
@@ -45,7 +47,7 @@ export default function Dashboard() {
     error: fmsError,
     setError
   } = useData();
-  const { showSuccess, showError, showWarning, showInfo } = useAlert();
+  const { showSuccess, showError } = useAlert();
   const navigate = useNavigate();
   const [updating, setUpdating] = useState<string | null>(null);
 
@@ -250,13 +252,23 @@ export default function Dashboard() {
 
   const filteredTasks = getFilteredTasks();
 
-  const totalTasks = allUnifiedTasks.length;
-  const fmsTaskCount = allUnifiedTasks.filter(t => t.type === 'FMS').length;
-  const tmTaskCount = allUnifiedTasks.filter(t => t.type === 'TASK_MANAGEMENT').length;
-  const completedTasks = allUnifiedTasks.filter(t => 
+  // Filter tasks assigned till current date (exclude future tasks)
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  
+  const tasksAssignedTillToday = allUnifiedTasks.filter(t => {
+    const dueDate = new Date(t.dueDate);
+    dueDate.setHours(0, 0, 0, 0);
+    return dueDate <= now; // Only tasks with due date today or in the past
+  });
+
+  const totalTasks = tasksAssignedTillToday.length;
+  const fmsTaskCount = tasksAssignedTillToday.filter(t => t.type === 'FMS').length;
+  const tmTaskCount = tasksAssignedTillToday.filter(t => t.type === 'TASK_MANAGEMENT').length;
+  const completedTasks = tasksAssignedTillToday.filter(t => 
     t.status === 'Done' || t.status.toLowerCase() === 'completed'
   ).length;
-  const dueTasks = allUnifiedTasks.filter(t => {
+  const dueTasks = tasksAssignedTillToday.filter(t => {
     const dueDate = new Date(t.dueDate);
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -627,138 +639,111 @@ export default function Dashboard() {
   const loading = fmsLoading.myTasks || tmLoading;
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="bg-white rounded-xl shadow-lg p-8 flex flex-col items-center justify-center">
-          <Loader className="w-8 h-8 animate-spin text-slate-600 mb-4" />
-          <p className="text-slate-600">Loading unified dashboard...</p>
-        </div>
-      </div>
-    );
+    return <SkeletonDashboard />;
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-6">
-      <div className="bg-white rounded-xl shadow-lg">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="w-full px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-6"
+    >
+      <div className="card-premium">
         {/* Header */}
-        <div className="p-4 sm:p-6 border-b border-slate-200">
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3">
-            <CheckSquare className="w-7 h-7 sm:w-8 sm:h-8" />
+        <div className="p-4 sm:p-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-blue-50">
+          <motion.h1
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+            className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3"
+          >
+            <div className="p-2 bg-gradient-to-br from-accent-500 to-brand-500 rounded-xl">
+              <CheckSquare className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+            </div>
             Unified Dashboard
-        </h1>
-          <p className="text-sm sm:text-base text-slate-600">All your FMS projects and tasks in one place</p>
+          </motion.h1>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="text-sm sm:text-base text-slate-600"
+          >
+            All your FMS projects and tasks in one place
+          </motion.p>
         </div>
 
         {/* Statistics Cards */}
-        <div className="p-4 sm:p-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-blue-50">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-            <div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm border border-slate-200">
-              <div className="text-slate-600 text-xs sm:text-sm mb-1">Total Tasks</div>
-              <div className="text-xl sm:text-2xl font-bold text-slate-900">{totalTasks}</div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm border border-purple-200">
-              <div className="text-purple-600 text-xs sm:text-sm mb-1">FMS Tasks</div>
-              <div className="text-xl sm:text-2xl font-bold text-purple-900">{fmsTaskCount}</div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm border border-cyan-200">
-              <div className="text-cyan-600 text-xs sm:text-sm mb-1">Assigned Tasks</div>
-              <div className="text-xl sm:text-2xl font-bold text-cyan-900">{tmTaskCount}</div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm border border-green-200">
-              <div className="text-green-600 text-xs sm:text-sm mb-1">Completed</div>
-              <div className="text-xl sm:text-2xl font-bold text-green-900">{completedTasks}</div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm border border-yellow-200">
-              <div className="text-yellow-600 text-xs sm:text-sm mb-1">Due Tasks</div>
-              <div className="text-xl sm:text-2xl font-bold text-yellow-900">{dueTasks}</div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm border border-blue-200">
-              <div className="text-blue-600 text-xs sm:text-sm mb-1">Completion</div>
-              <div className="text-xl sm:text-2xl font-bold text-blue-900">{completionRate}%</div>
-            </div>
-          </div>
+        <div className="p-4 sm:p-6 border-b border-slate-200 bg-premium-gradient-subtle">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4"
+          >
+            {[
+              { label: 'Total Tasks', value: totalTasks, subtitle: 'Till today', color: 'slate', delay: 0.1 },
+              { label: 'FMS Tasks', value: fmsTaskCount, subtitle: 'Till today', color: 'purple', delay: 0.15 },
+              { label: 'Assigned Tasks', value: tmTaskCount, subtitle: 'Till today', color: 'cyan', delay: 0.2 },
+              { label: 'Completed', value: completedTasks, subtitle: '', color: 'green', delay: 0.25 },
+              { label: 'Due Tasks', value: dueTasks, subtitle: '', color: 'yellow', delay: 0.3 },
+              { label: 'Completion', value: `${completionRate}%`, subtitle: '', color: 'blue', delay: 0.35 },
+            ].map((stat, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: stat.delay }}
+                whileHover={{ scale: 1.05, y: -4 }}
+                className={`bg-white rounded-xl p-3 sm:p-4 shadow-lg border-2 hover-lift cursor-pointer border-${stat.color}-200 bg-gradient-to-br from-white to-${stat.color}-50`}
+              >
+                <div className={`text-${stat.color}-600 text-xs sm:text-sm mb-1 font-semibold`}>{stat.label}</div>
+                <div className={`text-xl sm:text-2xl font-bold text-${stat.color}-900`}>{stat.value}</div>
+                {stat.subtitle && <div className={`text-xs text-${stat.color}-500 mt-1`}>{stat.subtitle}</div>}
+              </motion.div>
+            ))}
+          </motion.div>
         </div>
 
         {/* Tabs with Counts */}
-        <div className="border-b border-slate-200 bg-slate-50">
-          <div className="px-4 sm:px-6 py-2">
-            <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
-              <button
-                onClick={() => setActiveTab('all')}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-sm sm:text-base ${
-                  activeTab === 'all'
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <ListChecks className="w-4 h-4" />
-                All ({totalTasks})
-              </button>
-              
-              <button
-                onClick={() => setActiveTab('due')}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-sm sm:text-base ${
-                  activeTab === 'due'
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <AlertCircle className="w-4 h-4" />
-                Due Today ({dueTasks})
-              </button>
-              
-              <button
-                onClick={() => setActiveTab('fms')}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-sm sm:text-base ${
-                  activeTab === 'fms'
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <Target className="w-4 h-4" />
-                FMS Projects ({fmsTaskCount})
-              </button>
-              
-            <button
-                onClick={() => setActiveTab('tm')}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-sm sm:text-base ${
-                  activeTab === 'tm'
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <CheckSquare className="w-4 h-4" />
-                Assigned Tasks ({tmTaskCount})
-            </button>
-
-            <button
-                onClick={() => setActiveTab('revisions')}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-sm sm:text-base ${
-                  activeTab === 'revisions'
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <Edit className="w-4 h-4" />
-                Revisions ({fmsRevisions.length})
-            </button>
-
-            <button
-                onClick={() => setActiveTab('objections')}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-sm sm:text-base ${
-                  activeTab === 'objections'
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <AlertCircle className="w-4 h-4" />
-                Objections ({objections.length})
-            </button>
+        <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-purple-50">
+          <div className="px-4 sm:px-6 py-3">
+            <div className="flex gap-2 overflow-x-auto scrollbar-premium pb-2 sm:pb-0">
+              {[
+                { id: 'all', icon: ListChecks, label: 'All', count: totalTasks },
+                { id: 'due', icon: AlertCircle, label: 'Due Today', count: dueTasks },
+                { id: 'fms', icon: Target, label: 'FMS Projects', count: fmsTaskCount },
+                { id: 'tm', icon: CheckSquare, label: 'Assigned Tasks', count: tmTaskCount },
+                { id: 'revisions', icon: Edit, label: 'Revisions', count: fmsRevisions.length },
+                { id: 'objections', icon: AlertCircle, label: 'Objections', count: objections.length },
+              ].map((tab, index) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <motion.button
+                    key={tab.id}
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 + index * 0.05 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`btn-premium flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg font-medium whitespace-nowrap text-sm sm:text-base transition-all duration-300 ${
+                      isActive
+                        ? 'bg-gradient-to-r from-accent-600 to-brand-600 text-white shadow-glow'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border-2 border-slate-200 hover:border-accent-300'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{tab.label}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                      isActive ? 'bg-white/20' : 'bg-slate-100'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </motion.button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -939,30 +924,30 @@ export default function Dashboard() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[600px]">
+            <div className="overflow-x-auto scrollbar-premium -mx-2 sm:-mx-4 md:-mx-6 px-2 sm:px-4 md:px-6">
+              <table className="w-full min-w-[800px]">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Type</th>
-                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Task</th>
-                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase hidden sm:table-cell">Particulars</th>
-                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Due Date</th>
-                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Status</th>
-                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Actions</th>
+                    <th className="px-2 sm:px-3 md:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Type</th>
+                    <th className="px-2 sm:px-3 md:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase min-w-[200px]">Task</th>
+                    <th className="px-2 sm:px-3 md:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase hidden sm:table-cell min-w-[150px]">Particulars</th>
+                    <th className="px-2 sm:px-3 md:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase hidden md:table-cell">Due Date</th>
+                    <th className="px-2 sm:px-3 md:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Status</th>
+                    <th className="px-2 sm:px-3 md:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {filteredTasks.map((task) => (
                     <tr key={task.id} className={`hover:bg-slate-50 ${task.isOverdue ? 'bg-red-50' : ''}`}>
-                      <td className="px-3 sm:px-4 py-3">
+                      <td className="px-2 sm:px-3 md:px-4 py-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getTypeColor(task.type)}`}>
                           {task.type === 'FMS' ? 'FMS' : 'Task'}
                         </span>
                       </td>
-                      <td className="px-3 sm:px-4 py-3">
-                        <div className="text-sm font-medium text-slate-900">{task.title}</div>
+                      <td className="px-2 sm:px-3 md:px-4 py-3">
+                        <div className="text-sm font-medium text-slate-900 break-words min-w-[180px]">{task.title}</div>
                         {task.description && (
-                          <div className="text-xs text-slate-500 mt-1 truncate max-w-xs">{task.description}</div>
+                          <div className="text-xs text-slate-500 mt-1 break-words line-clamp-2 max-w-[250px]">{task.description}</div>
                         )}
                         
                         {/* Show checklist items if any */}
@@ -1014,37 +999,37 @@ export default function Dashboard() {
                           );
                         })()}
                       </td>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-600 hidden sm:table-cell">
-                        {task.projectName || task.department || 'N/A'}
+                      <td className="px-2 sm:px-3 md:px-4 py-3 text-sm text-slate-600 hidden sm:table-cell">
+                        <span className="break-words min-w-[120px]">{task.projectName || task.department || 'N/A'}</span>
                       </td>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-600">
+                      <td className="px-2 sm:px-3 md:px-4 py-3 text-sm text-slate-600 hidden md:table-cell">
                         <div className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
-                          {formatDate(task.dueDate)}
+                          <span className="whitespace-nowrap">{formatDate(task.dueDate)}</span>
                       </div>
                         {task.isOverdue && (
                           <span className="text-xs text-red-600 font-medium">Overdue!</span>
                         )}
                       </td>
-                      <td className="px-3 sm:px-4 py-3">
+                      <td className="px-2 sm:px-3 md:px-4 py-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(task.status)}`}>
                           {task.status}
                         </span>
                       </td>
-                      <td className="px-3 sm:px-4 py-3">
+                      <td className="px-2 sm:px-3 md:px-4 py-3">
                         {(task.status !== 'Done' && task.status.toLowerCase() !== 'completed') && (
                           <div className="flex flex-wrap gap-1 sm:gap-2">
                             <button
                               onClick={() => handleCompleteTask(task)}
                               disabled={updating === task.id}
-                              className="px-2 sm:px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors disabled:opacity-50"
+                              className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors disabled:opacity-50 whitespace-nowrap"
                             >
                               {updating === task.id ? <Loader className="w-3 h-3 animate-spin" /> : 'Complete'}
                             </button>
                             <button
                               onClick={() => handleReviseTask(task)}
                               disabled={updating === task.id}
-                              className="px-2 sm:px-3 py-1 bg-orange-600 text-white rounded text-xs hover:bg-orange-700 transition-colors disabled:opacity-50"
+                              className="px-2 py-1 bg-orange-600 text-white rounded text-xs hover:bg-orange-700 transition-colors disabled:opacity-50 whitespace-nowrap"
                             >
                               Revise
                             </button>
@@ -1072,37 +1057,45 @@ export default function Dashboard() {
           </div>
 
         {/* Quick Actions Footer */}
-        <div className="p-4 sm:p-6 border-t border-slate-200 bg-slate-50">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="p-4 sm:p-6 border-t border-slate-200 bg-gradient-to-r from-slate-50 to-purple-50"
+        >
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-                <button
-                  onClick={() => navigate('/start-project')}
-              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors text-sm sm:text-base"
-            >
-              <Target className="w-4 h-4 sm:w-5 sm:h-5" />
-              Start FMS Project
-            </button>
-            <button
-              onClick={() => navigate('/tasks')}
-              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-cyan-600 text-white rounded-lg font-medium hover:bg-cyan-700 transition-colors text-sm sm:text-base"
-            >
-              <CheckSquare className="w-4 h-4 sm:w-5 sm:h-5" />
-              Assign Task
-            </button>
-            <button
-              onClick={() => {
-                loadMyTasks(user!.username);
-                loadTaskManagementData();
-                loadFMSRevisions();
-                loadObjections();
-              }}
-              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-slate-600 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors text-sm sm:text-base"
-            >
-              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
-              Refresh
-                </button>
-              </div>
-                        </div>
-                        </div>
+            {[
+              { onClick: () => navigate('/start-project'), icon: Target, label: 'Start FMS Project', color: 'from-purple-600 to-purple-700' },
+              { onClick: () => navigate('/tasks'), icon: CheckSquare, label: 'Assign Task', color: 'from-cyan-600 to-cyan-700' },
+              {
+                onClick: () => {
+                  loadMyTasks(user!.username);
+                  loadTaskManagementData();
+                  loadFMSRevisions();
+                  loadObjections();
+                },
+                icon: TrendingUp,
+                label: 'Refresh',
+                color: 'from-slate-600 to-slate-700',
+              },
+            ].map((action, index) => {
+              const Icon = action.icon;
+              return (
+                <motion.button
+                  key={index}
+                  whileHover={{ scale: 1.05, y: -2 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={action.onClick}
+                  className={`btn-premium flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r ${action.color} text-white rounded-xl font-medium shadow-lg hover:shadow-glow transition-all text-sm sm:text-base`}
+                >
+                  <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+                  {action.label}
+                </motion.button>
+              );
+            })}
+          </div>
+        </motion.div>
+      </div>
 
       {/* Revision Modal */}
       {showRevisionModal && selectedTask && (
@@ -1683,6 +1676,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

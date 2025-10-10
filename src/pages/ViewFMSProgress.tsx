@@ -9,13 +9,26 @@ export default function ViewFMSProgress() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadProjects();
+    loadUsers();
   }, []);
+
+  const loadUsers = async () => {
+    try {
+      const result = await api.getUsers();
+      if (result.success) {
+        setAllUsers(result.users || []);
+      }
+    } catch (err) {
+      console.error('Failed to load users:', err);
+    }
+  };
 
   const loadProjects = async () => {
     setLoading(true);
@@ -32,6 +45,36 @@ export default function ViewFMSProgress() {
       setLoading(false);
     }
   };
+
+  // Role-based filtering based on FMS assignment (Column E = WHO)
+  const getFilteredProjects = () => {
+    if (!user || !projects.length) return projects;
+
+    const userRole = user.role?.toLowerCase();
+    
+    // Super Admin sees everything
+    if (userRole === 'superadmin' || userRole === 'super admin') {
+      return projects;
+    }
+    
+    // Admin sees projects where tasks are assigned to users in their department
+    if (userRole === 'admin') {
+      return projects.filter(project => {
+        // Check if any task in this project is assigned to someone in admin's department
+        return project.tasks.some(task => {
+          const assignedUser = allUsers.find(u => u.username === task.who);
+          return assignedUser?.department === user.department || task.who === user.username;
+        });
+      });
+    }
+    
+    // Regular users see only projects with tasks assigned to them (based on FMS WHO column)
+    return projects.filter(project => 
+      project.tasks.some(task => task.who === user.username)
+    );
+  };
+
+  const filteredProjects = getFilteredProjects();
 
   const toggleProject = (projectId: string) => {
     const newExpanded = new Set(expandedProjects);
@@ -160,7 +203,7 @@ export default function ViewFMSProgress() {
           </div>
         )}
 
-        {projects.length === 0 ? (
+        {filteredProjects.length === 0 ? (
           <div className="text-center py-12">
             <Target className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-600 mb-4">No FMS projects available</p>
@@ -173,7 +216,7 @@ export default function ViewFMSProgress() {
           </div>
         ) : (
           <div className="space-y-4">
-            {projects.map((project) => {
+            {filteredProjects.map((project) => {
               const progress = getProjectProgress(project);
               const isExpanded = expandedProjects.has(project.projectId);
 

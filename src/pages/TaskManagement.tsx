@@ -31,6 +31,10 @@ export default function TaskManagement() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
+  // Scoring permissions
+  const [selectedScoringUser, setSelectedScoringUser] = useState(user?.username || '');
+  const [availableUsers, setAvailableUsers] = useState<TaskUser[]>([]);
+  
   // Task data
   const [tasks, setTasks] = useState<TaskData[]>([]);
   const [summary, setSummary] = useState<TaskSummary>({
@@ -83,9 +87,42 @@ export default function TaskManagement() {
       loadSummary();
       loadTasks('all');
       loadTaskUsers();
+      loadAvailableUsersForScoring();
       setDefaultScoringDates();
+      setSelectedScoringUser(user.username);
     }
   }, [user?.username]);
+
+  const loadAvailableUsersForScoring = async () => {
+    try {
+      const result = await api.getTaskUsers();
+      if (result.success) {
+        setAvailableUsers(result.users || []);
+      }
+    } catch (err) {
+      console.error('Error loading users for scoring:', err);
+    }
+  };
+
+  // Role-based user filtering for scoring
+  const getScoringUsers = () => {
+    if (!user) return [];
+    
+    const userRole = user.role?.toLowerCase();
+    
+    // Super Admin can see everyone
+    if (userRole === 'superadmin' || userRole === 'super admin') {
+      return availableUsers;
+    }
+    
+    // Admin can see users in their department
+    if (userRole === 'admin') {
+      return availableUsers.filter(u => u.department === user.department);
+    }
+    
+    // Regular users can only see themselves
+    return availableUsers.filter(u => u.userId === user.username);
+  };
 
   // Reload tasks when tab changes
   useEffect(() => {
@@ -227,8 +264,9 @@ export default function TaskManagement() {
     setError('');
     
     try {
+      // Use selectedScoringUser instead of user!.username for role-based access
       const result = await api.getScoringData(
-        user!.username,
+        selectedScoringUser,
         scoringDates.startDate,
         scoringDates.endDate
       );
@@ -674,6 +712,26 @@ export default function TaskManagement() {
           {activeTab === 'scoring' && (
             <div className="space-y-6">
               <div className="max-w-2xl mx-auto">
+                {/* User Selection for Scoring */}
+                {getScoringUsers().length > 1 && (
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Select User for Scoring
+                    </label>
+                    <select
+                      value={selectedScoringUser}
+                      onChange={(e) => setSelectedScoringUser(e.target.value)}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    >
+                      {getScoringUsers().map((user) => (
+                        <option key={user.userId} value={user.userId}>
+                          {user.name} ({user.userId}) - {user.department}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                
                 <div className="flex gap-4 mb-6">
                   <div className="flex-1">
                     <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -719,7 +777,9 @@ export default function TaskManagement() {
 
               {scoringData && (
                 <div className="max-w-4xl mx-auto bg-slate-50 rounded-xl p-6 space-y-4">
-                  <h3 className="text-xl font-bold text-slate-900 mb-4">Performance Report</h3>
+                  <h3 className="text-xl font-bold text-slate-900 mb-4">
+                    Performance Report - {getScoringUsers().find(u => u.userId === selectedScoringUser)?.name || selectedScoringUser}
+                  </h3>
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-white rounded-lg p-4 border border-slate-200">
