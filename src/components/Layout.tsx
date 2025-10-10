@@ -62,7 +62,7 @@ export default function Layout({ children }: LayoutProps) {
                   src="/assets/AMG LOGO.webp" 
                   alt="Company Logo" 
                   className="w-10 h-10 sm:w-12 sm:h-12 object-contain rounded-lg shadow-lg"
-                  onError={(e) => {
+                  onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
                     // Fallback to icon if image fails to load
                     e.currentTarget.style.display = 'none';
                     const fallback = document.createElement('div');
