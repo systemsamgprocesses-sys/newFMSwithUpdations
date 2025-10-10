@@ -169,11 +169,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       const result = await api.getProjectsByUser(username);
       if (result.success) {
-        const enhancedTasks = result.tasks.map((task: ProjectTask) => ({
-          ...task,
-          isOverdue: isTaskOverdue(task),
-          completionStatus: getCompletionStatus(task),
-        }));
+        console.log('📋 Raw tasks from API:', result.tasks);
+        
+        const enhancedTasks = result.tasks.map((task: ProjectTask) => {
+          console.log('📋 Task:', task.what, 'Requires checklist?', task.requiresChecklist, 'Items:', task.checklistItems);
+          
+          return {
+            ...task,
+            isOverdue: isTaskOverdue(task),
+            completionStatus: getCompletionStatus(task),
+            // Explicitly preserve checklist fields
+            requiresChecklist: task.requiresChecklist,
+            checklistItems: task.checklistItems,
+            attachments: task.attachments
+          };
+        });
+        
+        console.log('📋 Enhanced tasks:', enhancedTasks);
         setMyTasks(enhancedTasks);
       } else {
         setError(result.message || 'Failed to load tasks');

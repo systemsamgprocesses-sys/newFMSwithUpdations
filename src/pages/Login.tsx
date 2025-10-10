@@ -48,20 +48,38 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8">
-          <div className="flex justify-center mb-4 sm:mb-6">
-            <div className="bg-slate-900 p-3 sm:p-4 rounded-xl">
-              <Workflow className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-blue-600 to-purple-700 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-1/2 -right-1/2 w-full h-full bg-blue-500 rounded-full blur-3xl opacity-20 animate-pulse"></div>
+        <div className="absolute -bottom-1/2 -left-1/2 w-full h-full bg-purple-500 rounded-full blur-3xl opacity-20 animate-pulse" style={{animationDelay: '1s'}}></div>
+      </div>
+      
+      <div className="w-full max-w-md relative z-10">
+        <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 animate-fade-in">
+          <div className="flex flex-col items-center mb-4 sm:mb-6">
+            <img 
+              src="/assets/AMG LOGO.webp" 
+              alt="Company Logo" 
+              className="w-20 h-20 sm:w-24 sm:h-24 object-contain mb-4"
+              onError={(e) => {
+                // Fallback to icon if image fails
+                e.currentTarget.style.display = 'none';
+                const fallback = document.createElement('div');
+                fallback.className = 'bg-gradient-to-br from-purple-600 to-blue-600 p-4 rounded-xl mb-4';
+                fallback.innerHTML = '<svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+                e.currentTarget.parentElement?.insertBefore(fallback, e.currentTarget);
+              }}
+            />
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-bold text-center text-slate-900 mb-2">
-            Flow Management System
+          <h1 className="text-2xl sm:text-3xl font-bold text-center mb-2">
+            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+              Task Management System
+            </span>
           </h1>
           <p className="text-center text-slate-600 mb-6 sm:mb-8 text-sm sm:text-base">
-            Sign in to manage your workflows
+            Sign in to streamline your workflows
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
@@ -127,7 +145,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading || !!configError}
-              className="w-full bg-slate-900 text-white py-2 sm:py-3 rounded-lg font-medium hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base"
+              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-2 sm:py-3 rounded-lg font-medium hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
               {loading ? (
                 <>

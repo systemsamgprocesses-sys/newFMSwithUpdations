@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { TaskData, TaskSummary, TaskUser, ScoringData } from '../types';
+import DriveFileUpload from '../components/DriveFileUpload';
 
 type TabType = 'overview' | 'upcoming' | 'pending' | 'all' | 'revisions' | 'assign' | 'scoring';
 
@@ -50,8 +51,10 @@ export default function TaskManagement() {
     description: '',
     plannedDate: '',
     tutorialLinks: '',
-    department: ''
+    department: '',
+    attachments: [] as any[]
   });
+  const [hasPendingUploads, setHasPendingUploads] = useState(false);
   
   // Scoring data
   const [scoringData, setScoringData] = useState<ScoringData | null>(null);
@@ -133,6 +136,13 @@ export default function TaskManagement() {
 
   const handleAssignTask = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check for pending uploads
+    if (hasPendingUploads) {
+      setError('⚠️ Files are selected but not uploaded! Click "Upload to Drive Now!" button first.');
+      return;
+    }
+    
     setLoading(true);
     setError('');
     setSuccess('');
@@ -144,7 +154,8 @@ export default function TaskManagement() {
         description: assignForm.description,
         plannedDate: assignForm.plannedDate,
         tutorialLinks: assignForm.tutorialLinks,
-        department: assignForm.department
+        department: assignForm.department,
+        attachments: assignForm.attachments
       });
       
       if (result.success) {
@@ -154,7 +165,8 @@ export default function TaskManagement() {
           description: '',
           plannedDate: '',
           tutorialLinks: '',
-          department: ''
+          department: '',
+          attachments: []
         });
         loadSummary();
         setTimeout(() => setSuccess(''), 3000);
@@ -616,6 +628,24 @@ export default function TaskManagement() {
                     onChange={(e) => setAssignForm({ ...assignForm, tutorialLinks: e.target.value })}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                     placeholder="https://..."
+                  />
+                </div>
+
+                {/* File Upload for Task */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    📎 Attachments (Optional)
+                  </label>
+                  <DriveFileUpload
+                    fmsName={`Task-${assignForm.description.substring(0, 20)}`}
+                    username={user!.username}
+                    onFilesUploaded={(files) => {
+                      setAssignForm({ ...assignForm, attachments: files });
+                    }}
+                    currentFiles={assignForm.attachments}
+                    maxFiles={3}
+                    maxSizeMB={10}
+                    onPendingFilesChange={setHasPendingUploads}
                   />
                 </div>
 

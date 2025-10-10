@@ -110,14 +110,14 @@ export default function StartProject() {
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Project Name
+                Investor Name
               </label>
               <input
                 type="text"
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all outline-none"
-                placeholder="Enter project name"
+                placeholder="Enter investor name"
                 required
               />
             </div>

@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Save, GitBranch } from 'lucide-react';
+import { Plus, Trash2, Save, GitBranch, CheckSquare, X, Upload as UploadIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import { FMSStep, User } from '../types';
+import { FMSStep, User, ChecklistItem } from '../types';
 import mermaid from 'mermaid';
+import DriveFileUpload, { DriveFileUploadHandle } from '../components/DriveFileUpload';
 
 mermaid.initialize({ startOnLoad: false, theme: 'default' });
 
@@ -13,21 +14,39 @@ export default function CreateFMS() {
   const navigate = useNavigate();
   const [fmsName, setFmsName] = useState('');
   const [steps, setSteps] = useState<FMSStep[]>([
-    { stepNo: 1, what: '', who: '', how: '', when: 0, whenUnit: 'days', whenDays: 0, whenHours: 0 },
+    { 
+      stepNo: 1, 
+      what: '', 
+      who: '', 
+      how: '', 
+      when: 0, 
+      whenUnit: 'days', 
+      whenDays: 0, 
+      whenHours: 0,
+      requiresChecklist: false,
+      checklistItems: []
+    },
   ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showDiagram, setShowDiagram] = useState(false);
   const [diagramSvg, setDiagramSvg] = useState('');
   const [users, setUsers] = useState<User[]>([]);
+  const [fmsList, setFmsList] = useState<any[]>([]);
+  const [pendingUploads, setPendingUploads] = useState<{[key: number]: boolean}>({});
+  const [uploadProgress, setUploadProgress] = useState<string>('');
+  
+  // Refs for file upload components
+  const fileUploadRefs = useRef<{ [key: number]: DriveFileUploadHandle | null }>({});
 
   useEffect(() => {
     if (showDiagram && steps.every(s => s.what)) {
       generateDiagram();
     }
     
-    // Load users for WHO dropdown
+    // Load users and FMS list for dropdowns
     loadUsers();
+    loadFMSList();
   }, [showDiagram, steps]);
   
   const loadUsers = async () => {
@@ -38,6 +57,17 @@ export default function CreateFMS() {
       }
     } catch (err) {
       console.error('Error loading users:', err);
+    }
+  };
+
+  const loadFMSList = async () => {
+    try {
+      const response = await api.getAllFMS();
+      if (response.success) {
+        setFmsList(response.fmsList || []);
+      }
+    } catch (err) {
+      console.error('Error loading FMS list:', err);
     }
   };
 
@@ -81,7 +111,9 @@ graph LR
       when: 0,
       whenUnit: 'days',
       whenDays: 0,
-      whenHours: 0
+      whenHours: 0,
+      requiresChecklist: false,
+      checklistItems: []
     });
     
     // Update step numbers for all steps
@@ -91,6 +123,35 @@ graph LR
     }));
     
     setSteps(updatedSteps);
+  };
+
+  const addChecklistItem = (stepIndex: number) => {
+    const newSteps = [...steps];
+    const checklistItems = newSteps[stepIndex].checklistItems || [];
+    checklistItems.push({
+      id: `checklist-${Date.now()}`,
+      text: '',
+      completed: false
+    });
+    newSteps[stepIndex].checklistItems = checklistItems;
+    setSteps(newSteps);
+  };
+
+  const removeChecklistItem = (stepIndex: number, itemId: string) => {
+    const newSteps = [...steps];
+    newSteps[stepIndex].checklistItems = (newSteps[stepIndex].checklistItems || []).filter(
+      item => item.id !== itemId
+    );
+    setSteps(newSteps);
+  };
+
+  const updateChecklistItem = (stepIndex: number, itemId: string, text: string) => {
+    const newSteps = [...steps];
+    const item = (newSteps[stepIndex].checklistItems || []).find(i => i.id === itemId);
+    if (item) {
+      item.text = text;
+      setSteps(newSteps);
+    }
   };
 
   const removeStep = (index: number) => {
@@ -105,7 +166,7 @@ graph LR
     }
   };
 
-  const updateStep = (index: number, field: keyof FMSStep, value: string | number) => {
+  const updateStep = (index: number, field: keyof FMSStep, value: string | number | boolean | ChecklistItem[]) => {
     const newSteps = [...steps];
     newSteps[index] = { ...newSteps[index], [field]: value };
 
@@ -141,18 +202,62 @@ graph LR
       return;
     }
 
+    // Validate checklist items
+    const hasEmptyChecklists = steps.some(
+      step => step.requiresChecklist && 
+      (!step.checklistItems || step.checklistItems.length === 0 || 
+       step.checklistItems.some(item => !item.text.trim()))
+    );
+
+    if (hasEmptyChecklists) {
+      setError('Please add at least one checklist item for steps that require checklists');
+      return;
+    }
+
     setLoading(true);
 
     try {
+      // Check if any step has pending file uploads and upload them automatically
+      const hasPendingUploads = Object.values(pendingUploads).some(pending => pending === true);
+      
+      if (hasPendingUploads) {
+        setUploadProgress('📤 Uploading files to Google Drive...');
+        
+        // Upload all pending files
+        for (let i = 0; i < steps.length; i++) {
+          const uploadRef = fileUploadRefs.current[i];
+          if (uploadRef && uploadRef.hasPendingFiles()) {
+            setUploadProgress(`📤 Uploading files for Step ${i + 1}...`);
+            
+            try {
+              const success = await uploadRef.uploadPendingFiles();
+              
+              if (!success) {
+                throw new Error(`Upload failed for Step ${i + 1}. Please try again.`);
+              }
+            } catch (uploadError: any) {
+              throw new Error(`Failed to upload files for Step ${i + 1}: ${uploadError.message}`);
+            }
+          }
+        }
+        
+        setUploadProgress('✅ All files uploaded! Saving FMS...');
+        // Small delay to show success message
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      // Save the FMS
       const result = await api.createFMS(fmsName, steps, user!.username);
 
       if (result.success) {
+        setUploadProgress('');
         navigate('/dashboard');
       } else {
         setError(result.message || 'Failed to create FMS');
       }
-    } catch (err) {
-      setError('Connection error. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Connection error. Please try again.');
+      setUploadProgress('');
     } finally {
       setLoading(false);
     }
@@ -314,6 +419,116 @@ graph LR
                     )}
                   </div>
                 </div>
+
+                {/* Attachment Option - REAL FILE UPLOAD */}
+                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <label className="block text-sm font-medium text-green-900 mb-2">
+                    📎 Upload Attachments to Google Drive
+                  </label>
+                  <DriveFileUpload
+                    ref={(ref) => {
+                      fileUploadRefs.current[index] = ref;
+                    }}
+                    stepIndex={index}
+                    fmsName={fmsName}
+                    username={user!.username}
+                    onFilesUploaded={(files) => {
+                      const newSteps = [...steps];
+                      newSteps[index].attachments = files;
+                      setSteps(newSteps);
+                    }}
+                    currentFiles={step.attachments || []}
+                    onPendingFilesChange={(hasPending) => {
+                      setPendingUploads(prev => ({
+                        ...prev,
+                        [index]: hasPending
+                      }));
+                    }}
+                  />
+                </div>
+
+                {/* Checklist Option */}
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={step.requiresChecklist || false}
+                      onChange={(e) => updateStep(index, 'requiresChecklist', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <CheckSquare className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-900">
+                      This step requires a checklist
+                    </span>
+                  </label>
+
+                  {step.requiresChecklist && (
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-blue-800">Checklist Items:</span>
+                        <button
+                          type="button"
+                          onClick={() => addChecklistItem(index)}
+                          className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Add Item
+                        </button>
+                      </div>
+
+                      {(step.checklistItems || []).map((item, itemIndex) => (
+                        <div key={item.id} className="flex items-center gap-2">
+                          <span className="text-xs text-blue-700">{itemIndex + 1}.</span>
+                          <input
+                            type="text"
+                            value={item.text}
+                            onChange={(e) => updateChecklistItem(index, item.id, e.target.value)}
+                            placeholder="Checklist item..."
+                            className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                            required={step.requiresChecklist}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeChecklistItem(index, item.id)}
+                            className="text-red-600 hover:text-red-700 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+
+                      {(!step.checklistItems || step.checklistItems.length === 0) && (
+                        <p className="text-xs text-blue-600 italic">
+                          Click "Add Item" to create checklist items
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* FMS Trigger Option */}
+                <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                  <label className="block text-sm font-medium text-purple-900 mb-2">
+                    🚀 Trigger Another FMS When This Step Completes
+                  </label>
+                  <select
+                    value={step.triggersFMSId || ''}
+                    onChange={(e) => updateStep(index, 'triggersFMSId', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-white"
+                  >
+                    <option value="">None - Don't trigger any FMS</option>
+                    {fmsList.map((fms) => (
+                      <option key={fms.fmsId} value={fms.fmsId}>
+                        {fms.fmsName} ({fms.stepCount} steps)
+                      </option>
+                    ))}
+                  </select>
+                  {step.triggersFMSId && (
+                    <p className="text-xs text-purple-700 mt-2">
+                      ✨ When this step is marked as "Done", a new project will automatically be created from the selected FMS template.
+                    </p>
+                  )}
+                </div>
                 </div>
                 
                 {/* Add Step button after each step */}
@@ -334,6 +549,13 @@ graph LR
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-sm sm:text-base">
               {error}
+            </div>
+          )}
+
+          {uploadProgress && (
+            <div className="bg-blue-50 border border-blue-200 text-blue-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-sm sm:text-base flex items-center gap-2">
+              <UploadIcon className="w-5 h-5 animate-pulse" />
+              <span>{uploadProgress}</span>
             </div>
           )}
 

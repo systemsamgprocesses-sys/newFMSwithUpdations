@@ -37,6 +37,33 @@ export default function ViewAllFMS() {
     return `${step.when} days`;
   };
 
+  const calculateTotalTime = (steps: any[]) => {
+    let totalDays = 0;
+    let totalHours = 0;
+
+    steps.forEach(step => {
+      const days = step.whenDays || Math.floor(step.when || 0);
+      const hours = step.whenHours || Math.round(((step.when || 0) % 1) * 24);
+      totalDays += days;
+      totalHours += hours;
+    });
+
+    // Convert excess hours to days
+    if (totalHours >= 24) {
+      totalDays += Math.floor(totalHours / 24);
+      totalHours = totalHours % 24;
+    }
+
+    if (totalDays > 0 && totalHours > 0) {
+      return `${totalDays} days ${totalHours} hours`;
+    } else if (totalDays > 0) {
+      return `${totalDays} days`;
+    } else if (totalHours > 0) {
+      return `${totalHours} hours`;
+    }
+    return '0 days';
+  };
+
   if (loading.fmsList) {
     return (
       <div className="max-w-7xl mx-auto p-6">
@@ -94,9 +121,14 @@ export default function ViewAllFMS() {
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-slate-900 mb-1">
+                      <h3 className="text-lg font-semibold text-slate-900 mb-2">
                         {fms.fmsName}
                       </h3>
+                      {fms.totalTimeFormatted && (
+                        <div className="mb-2 inline-block px-3 py-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full text-sm font-medium">
+                          ⏱️ Total Time: {fms.totalTimeFormatted}
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-4 text-sm text-slate-600">
                         <span>Steps: {fms.stepCount}</span>
                         <span>Created by: {fms.createdBy}</span>
@@ -120,6 +152,17 @@ export default function ViewAllFMS() {
                   <div className="p-4 bg-white border-t border-slate-200">
                     {fmsDetails[fms.fmsId] && fmsDetails[fms.fmsId].steps ? (
                       <>
+                        <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-sm font-medium text-slate-600">Total Duration</span>
+                              <p className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                                {calculateTotalTime(fmsDetails[fms.fmsId].steps)}
+                              </p>
+                            </div>
+                            <div className="text-4xl">⏱️</div>
+                          </div>
+                        </div>
                         <h4 className="font-semibold text-slate-900 mb-3">Steps:</h4>
                         <div className="space-y-3">
                           {fmsDetails[fms.fmsId].steps.map((step: any) => (

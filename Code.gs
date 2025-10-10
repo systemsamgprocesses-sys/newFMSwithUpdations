@@ -1,6 +1,7 @@
 // ============================================
 // COMPREHENSIVE FMS + TASK MANAGEMENT SYSTEM
 // Google Apps Script Web App Backend
+// Enhanced Version with ALL Features
 // ============================================
 
 // ===== CONFIGURATION =====
@@ -11,12 +12,100 @@ const CREDENTIALS_SHEET_ID = '1ipCXOWo1A8w3sbmhaQcrhFHaCPgaHaHWR6Wr-MPDZ14';
 // Get the active spreadsheet for FMS data
 const FMS_SS = SpreadsheetApp.getActiveSpreadsheet();
 
+// ===== SHEET AUTO-CREATION =====
+
+/**
+ * Ensure all required sheets exist with proper structure
+ */
+function ensureSheetsExist() {
+  const ss = FMS_SS;
+  
+  // 1. FMS_MASTER sheet
+  let masterSheet = ss.getSheetByName('FMS_MASTER');
+  if (!masterSheet) {
+    masterSheet = ss.insertSheet('FMS_MASTER');
+    masterSheet.appendRow([
+      'FMS_ID', 'FMS_Name', 'Step_No', 'WHAT', 'WHO', 'HOW', 'WHEN',
+      'When_Unit', 'When_Days', 'When_Hours', 'Created_By', 'Created_On',
+      'Last_Updated_By', 'Last_Updated_On', 'Requires_Checklist', 
+      'Checklist_Items', 'Attachments', 'Triggers_FMS_ID'
+    ]);
+    Logger.log('✓ Created FMS_MASTER sheet');
+  }
+  
+  // 2. FMS_PROGRESS sheet
+  let progressSheet = ss.getSheetByName('FMS_PROGRESS');
+  if (!progressSheet) {
+    progressSheet = ss.insertSheet('FMS_PROGRESS');
+    progressSheet.appendRow([
+      'Project_ID', 'FMS_ID', 'Project_Name', 'Step_No', 'WHAT', 'WHO', 'HOW',
+      'Planned_Due_Date', 'Actual_Completed_On', 'Status', 'Completed_By',
+      'Is_First_Step', 'Created_By', 'Created_On', 'Last_Updated_By',
+      'Last_Updated_On', 'Requires_Checklist', 'Checklist_Items', 'Attachments',
+      'Triggers_FMS_ID'
+    ]);
+    Logger.log('✓ Created FMS_PROGRESS sheet');
+  }
+  
+  // 3. Users sheet
+  let usersSheet = ss.getSheetByName('Users');
+  if (!usersSheet) {
+    usersSheet = ss.insertSheet('Users');
+    usersSheet.appendRow([
+      'Username', 'Password', 'Name', 'Role', 'Department', 'Last_Login'
+    ]);
+    Logger.log('✓ Created Users sheet');
+  }
+  
+  // 4. OBJECTIONS sheet
+  let objectionsSheet = ss.getSheetByName('OBJECTIONS');
+  if (!objectionsSheet) {
+    objectionsSheet = ss.insertSheet('OBJECTIONS');
+    objectionsSheet.appendRow([
+      'Objection_ID', 'Task_ID', 'Project_ID', 'Task_Description', 'Reason',
+      'Raised_By', 'Raised_On', 'Route_To', 'Task_Type', 'Status',
+      'Reviewed_By', 'Reviewed_On', 'Action_Taken', 'New_Task_ID'
+    ]);
+    Logger.log('✓ Created OBJECTIONS sheet');
+  }
+  
+  // 5. FMS_REVISIONS sheet
+  let revisionsSheet = ss.getSheetByName('FMS_REVISIONS');
+  if (!revisionsSheet) {
+    revisionsSheet = ss.insertSheet('FMS_REVISIONS');
+    revisionsSheet.appendRow([
+      'Revision_ID', 'Project_ID', 'Project_Name', 'Step_No', 'Task_Description',
+      'Current_Due_Date', 'Requested_New_Date', 'Reason', 'Requested_By',
+      'Requested_On', 'Row_Index', 'Status', 'Approved_New_Date',
+      'Approved_By', 'Approved_On', 'Rejected_By', 'Rejected_On'
+    ]);
+    Logger.log('✓ Created FMS_REVISIONS sheet');
+  }
+  
+  // 6. FILE_UPLOADS_LOG sheet
+  let uploadsSheet = ss.getSheetByName('FILE_UPLOADS_LOG');
+  if (!uploadsSheet) {
+    uploadsSheet = ss.insertSheet('FILE_UPLOADS_LOG');
+    uploadsSheet.appendRow([
+      'File_ID', 'File_Name', 'File_URL', 'File_Size', 'MIME_Type',
+      'Uploaded_By', 'Uploaded_On', 'Context', 'Folder_Path'
+    ]);
+    Logger.log('✓ Created FILE_UPLOADS_LOG sheet');
+  }
+  
+  Logger.log('✅ All sheets verified/created!');
+  return { success: true, message: 'All sheets ready' };
+}
+
 // ===== MAIN HANDLERS =====
 
 function doGet(e) {
+  // Ensure sheets exist on first load
+  ensureSheetsExist();
+  
   return ContentService.createTextOutput(JSON.stringify({
     status: 'success',
-    message: 'FMS + Task Management API is running'
+    message: 'FMS + Task Management API is running - Enhanced Version'
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -34,6 +123,9 @@ function doPost(e) {
       // ===== AUTHENTICATION =====
       case 'login':
         result = handleLogin(params);
+        break;
+      case 'changePassword':
+        result = changePassword(params);
         break;
         
       // ===== FMS SYSTEM =====
@@ -71,7 +163,10 @@ function doPost(e) {
         result = getProjectsByUser(params.username);
         break;
       case 'updateTaskStatus':
-        result = updateTaskStatus(params);
+        result = updateTaskStatus(params.rowIndex, params.status, params.username);
+        break;
+      case 'submitProgressWithAttachments':
+        result = submitProgressWithAttachments(params);
         break;
       case 'getAllLogs':
         result = getAllLogs();
@@ -112,6 +207,31 @@ function doPost(e) {
         break;
       case 'rejectFMSRevision':
         result = rejectFMSRevision(params);
+        break;
+
+      // ===== OBJECTION SYSTEM =====
+      case 'raiseObjection':
+        result = raiseObjection(params);
+        break;
+      case 'getObjections':
+        result = getObjections(params.userId);
+        break;
+      case 'reviewObjection':
+        result = reviewObjection(params);
+        break;
+
+      // ===== DRIVE FILE UPLOAD =====
+      case 'uploadFile':
+        result = uploadFileToDrive(params);
+        break;
+      case 'uploadMultipleFiles':
+        result = uploadMultipleFiles(params);
+        break;
+      case 'deleteFile':
+        result = deleteFileFromDrive(params);
+        break;
+      case 'getFileMetadata':
+        result = getFileMetadata(params);
         break;
         
       default:
@@ -232,6 +352,76 @@ function handleLogin(params) {
   }
   
   return { success: false, message: 'Invalid credentials' };
+}
+
+/**
+ * Change user password with current password verification
+ */
+function changePassword(params) {
+  const username = (params.username || '').toString().trim();
+  const currentPassword = (params.currentPassword || '').toString().trim();
+  const newPassword = (params.newPassword || '').toString().trim();
+  
+  if (!username || !currentPassword || !newPassword) {
+    return { success: false, message: 'All fields are required' };
+  }
+  
+  // Validate new password
+  if (newPassword.length < 6) {
+    return { success: false, message: 'New password must be at least 6 characters long' };
+  }
+  
+  // Check FMS Users sheet
+  const fmsUsersSheet = FMS_SS.getSheetByName('Users');
+  if (fmsUsersSheet) {
+    const userData = fmsUsersSheet.getDataRange().getValues();
+    for (let i = 1; i < userData.length; i++) {
+      const row = userData[i];
+      if (String(row[0]) === username) {
+        // Verify current password
+        if (String(row[1]) !== currentPassword) {
+          return { success: false, message: 'Current password is incorrect' };
+        }
+        
+        // Update password
+        fmsUsersSheet.getRange(i + 1, 2).setValue(newPassword);
+        
+        return {
+          success: true,
+          message: 'Password changed successfully'
+        };
+      }
+    }
+  }
+  
+  // Check Task Management Credentials sheet
+  try {
+    const credSheet = SpreadsheetApp.openById(CREDENTIALS_SHEET_ID).getSheetByName('Credentials');
+    if (credSheet) {
+      const credData = credSheet.getDataRange().getValues();
+      for (let i = 1; i < credData.length; i++) {
+        const row = credData[i];
+        if (String(row[0]) === username) {
+          // Verify current password
+          if (String(row[1]) !== currentPassword) {
+            return { success: false, message: 'Current password is incorrect' };
+          }
+          
+          // Update password
+          credSheet.getRange(i + 1, 2).setValue(newPassword);
+          
+          return {
+            success: true,
+            message: 'Password changed successfully'
+          };
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log('Error accessing credentials sheet: ' + e.toString());
+  }
+  
+  return { success: false, message: 'User not found' };
 }
 
 // ===== FMS USER MANAGEMENT =====
@@ -365,6 +555,16 @@ function createFMS(params) {
     const timestamp = new Date().toISOString();
     
     steps.forEach((step, index) => {
+      // For Master sheet, only store checklist items without 'completed' status
+      let checklistForMaster = [];
+      if (step.checklistItems && step.checklistItems.length > 0) {
+        checklistForMaster = step.checklistItems.map(item => ({
+          id: item.id,
+          text: item.text
+          // Do NOT include 'completed' field in Master sheet
+        }));
+      }
+      
       masterSheet.appendRow([
         fmsId,
         fmsName,
@@ -379,7 +579,11 @@ function createFMS(params) {
         username,
         timestamp,
         username,
-        timestamp
+        timestamp,
+        step.requiresChecklist || false,
+        JSON.stringify(checklistForMaster),
+        JSON.stringify(step.attachments || []),
+        step.triggersFMSId || ''  // FMS to trigger when this step completes
       ]);
     });
     
@@ -413,6 +617,8 @@ function getAllFMS() {
       const fmsId = row[0];
       const fmsName = row[1];
       const stepNo = row[2];
+      const whenDays = row[8] || 0;
+      const whenHours = row[9] || 0;
       
       if (!fmsMap[fmsId]) {
         fmsMap[fmsId] = {
@@ -420,12 +626,35 @@ function getAllFMS() {
           fmsName: fmsName,
           stepCount: 0,
           createdBy: row[10],
-          createdOn: row[11]
+          createdOn: row[11],
+          totalDays: 0,
+          totalHours: 0
         };
       }
       
       fmsMap[fmsId].stepCount = Math.max(fmsMap[fmsId].stepCount, stepNo);
+      fmsMap[fmsId].totalDays += parseInt(whenDays) || 0;
+      fmsMap[fmsId].totalHours += parseInt(whenHours) || 0;
     }
+    
+    // Convert excess hours to days and format total time
+    Object.values(fmsMap).forEach(function(fms) {
+      if (fms.totalHours >= 24) {
+        fms.totalDays += Math.floor(fms.totalHours / 24);
+        fms.totalHours = fms.totalHours % 24;
+      }
+      
+      // Create formatted string
+      if (fms.totalDays > 0 && fms.totalHours > 0) {
+        fms.totalTimeFormatted = fms.totalDays + ' days ' + fms.totalHours + ' hours';
+      } else if (fms.totalDays > 0) {
+        fms.totalTimeFormatted = fms.totalDays + ' days';
+      } else if (fms.totalHours > 0) {
+        fms.totalTimeFormatted = fms.totalHours + ' hours';
+      } else {
+        fms.totalTimeFormatted = '0 days';
+      }
+    });
     
     return {
       success: true,
@@ -452,6 +681,27 @@ function getFMSById(fmsId) {
       const row = data[i];
       if (row[0] === fmsId) {
         if (!fmsName) fmsName = row[1];
+        
+        // Parse checklist items (column 15 = index 15) and attachments (column 16 = index 16)
+        let checklistItems = [];
+        let attachments = [];
+        
+        try {
+          if (row[15]) {
+            checklistItems = JSON.parse(row[15]);
+          }
+        } catch (e) {
+          Logger.log('Error parsing checklist items: ' + e.toString());
+        }
+        
+        try {
+          if (row[16]) {
+            attachments = JSON.parse(row[16]);
+          }
+        } catch (e) {
+          Logger.log('Error parsing attachments: ' + e.toString());
+        }
+        
         steps.push({
           stepNo: row[2],
           what: row[3],
@@ -460,7 +710,10 @@ function getFMSById(fmsId) {
           when: row[6],
           whenUnit: row[7] || 'days',
           whenDays: row[8] || 0,
-          whenHours: row[9] || 0
+          whenHours: row[9] || 0,
+          requiresChecklist: row[14] || false,
+          checklistItems: checklistItems,
+          attachments: attachments
         });
       }
     }
@@ -502,6 +755,31 @@ function createProject(params) {
     for (let i = 1; i < masterData.length; i++) {
       const row = masterData[i];
       if (row[0] === fmsId) {
+        // Parse checklist and attachments from FMS_MASTER
+        // FMS_MASTER columns: 14=Requires_Checklist, 15=Checklist_Items, 16=Attachments
+        let checklistItems = [];
+        let attachments = [];
+        
+        try {
+          if (row[15]) {
+            checklistItems = JSON.parse(row[15]);
+            // Initialize 'completed' field for progress tracking
+            checklistItems = checklistItems.map(item => ({
+              id: item.id,
+              text: item.text,
+              completed: false // Initialize as not completed
+            }));
+          }
+        } catch (e) {
+          Logger.log('Error parsing checklist: ' + e.toString());
+        }
+        
+        try {
+          if (row[16]) attachments = JSON.parse(row[16]);
+        } catch (e) {
+          Logger.log('Error parsing attachments: ' + e.toString());
+        }
+        
         steps.push({
           stepNo: row[2],
           what: row[3],
@@ -510,7 +788,11 @@ function createProject(params) {
           when: row[6],
           whenUnit: row[7] || 'days',
           whenDays: row[8] || 0,
-          whenHours: row[9] || 0
+          whenHours: row[9] || 0,
+          requiresChecklist: row[14] || false,
+          checklistItems: checklistItems,
+          attachments: attachments,
+          triggersFMSId: row[17] || ''  // Column 17: Triggers_FMS_ID
         });
       }
     }
@@ -528,23 +810,31 @@ function createProject(params) {
     currentDate.setDate(currentDate.getDate() + parseInt(whenDays));
     currentDate.setHours(currentDate.getHours() + parseInt(whenHours));
     
+    // For Progress sheet, include checklist items with 'completed' field
+    // Columns: Project_ID, FMS_ID, Project_Name, Step_No, WHAT, WHO, HOW, Planned_Due_Date,
+    // Actual_Completed_On, Status, Completed_By, Is_First_Step, Created_By, Created_On,
+    // Last_Updated_By, Last_Updated_On, Requires_Checklist, Checklist_Items, Attachments, Triggers_FMS_ID
     progressSheet.appendRow([
-      projectId,
-      fmsId,
-      projectName,
-      steps[0].stepNo,
-      steps[0].what,
-      steps[0].who,
-      steps[0].how,
-      currentDate.toISOString(),
-      '',
-      'Pending',
-      '',
-      'true',
-      username,
-      timestamp,
-      username,
-      timestamp
+      projectId,                                    // 0: Project_ID
+      fmsId,                                        // 1: FMS_ID
+      projectName,                                  // 2: Project_Name
+      steps[0].stepNo,                              // 3: Step_No
+      steps[0].what,                                // 4: WHAT
+      steps[0].who,                                 // 5: WHO
+      steps[0].how,                                 // 6: HOW
+      currentDate.toISOString(),                    // 7: Planned_Due_Date
+      '',                                           // 8: Actual_Completed_On
+      'Pending',                                    // 9: Status
+      '',                                           // 10: Completed_By
+      'true',                                       // 11: Is_First_Step
+      username,                                     // 12: Created_By
+      timestamp,                                    // 13: Created_On
+      username,                                     // 14: Last_Updated_By
+      timestamp,                                    // 15: Last_Updated_On
+      steps[0].requiresChecklist || false,          // 16: Requires_Checklist
+      JSON.stringify(steps[0].checklistItems || []),// 17: Checklist_Items
+      JSON.stringify(steps[0].attachments || []),   // 18: Attachments
+      steps[0].triggersFMSId || ''                  // 19: Triggers_FMS_ID
     ]);
     
     return {
@@ -561,6 +851,8 @@ function createProject(params) {
 function getAllProjects() {
   try {
     const progressSheet = FMS_SS.getSheetByName('FMS_PROGRESS');
+    const masterSheet = FMS_SS.getSheetByName('FMS_MASTER');
+    
     if (!progressSheet) {
       return { success: false, message: 'FMS_PROGRESS sheet not found' };
     }
@@ -570,19 +862,66 @@ function getAllProjects() {
       return { success: true, projects: [] };
     }
     
+    // Get total step counts from FMS_MASTER
+    const fmsStepCounts = {};
+    if (masterSheet) {
+      const masterData = masterSheet.getDataRange().getValues();
+      for (let i = 1; i < masterData.length; i++) {
+        const fmsId = masterData[i][0];
+        const stepNo = masterData[i][2];
+        if (!fmsStepCounts[fmsId]) {
+          fmsStepCounts[fmsId] = 0;
+        }
+        fmsStepCounts[fmsId] = Math.max(fmsStepCounts[fmsId], stepNo);
+      }
+    }
+    
     const projectMap = {};
     
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       const projectId = row[0];
+      const fmsId = row[1];
       
       if (!projectMap[projectId]) {
         projectMap[projectId] = {
           projectId: projectId,
-          fmsId: row[1],
+          fmsId: fmsId,
           projectName: row[2],
+          totalStepsInTemplate: fmsStepCounts[fmsId] || 0, // Total from template
           tasks: []
         };
+      }
+      
+      // Parse checklist and attachments from Progress sheet
+      // Column mapping: 0: Project_ID, 1: FMS_ID, 2: Project_Name, 3: Step_No, 4: WHAT, 5: WHO, 6: HOW,
+      // 7: Planned_Due_Date, 8: Actual_Completed_On, 9: Status, 10: Completed_By,
+      // 11: Is_First_Step, 12: Created_By, 13: Created_On, 14: Last_Updated_By,
+      // 15: Last_Updated_On, 16: Requires_Checklist, 17: Checklist_Items, 18: Attachments
+      
+      let checklistItems = [];
+      let attachments = [];
+      
+      try {
+        if (row[17]) { // Checklist_Items is column 17
+          checklistItems = JSON.parse(row[17]);
+          // Ensure each checklist item has all required fields
+          if (Array.isArray(checklistItems)) {
+            checklistItems = checklistItems.map(item => ({
+              id: item.id || `checklist-${Date.now()}-${Math.random()}`,
+              text: item.text || '',
+              completed: item.completed === true // Ensure boolean
+            }));
+          }
+        }
+      } catch (e) {
+        Logger.log('Error parsing checklist from progress: ' + e.toString());
+      }
+      
+      try {
+        if (row[18]) attachments = JSON.parse(row[18]); // Attachments is column 18
+      } catch (e) {
+        // Ignore parse errors
       }
       
       projectMap[projectId].tasks.push({
@@ -597,7 +936,10 @@ function getAllProjects() {
         completedBy: row[10] || '',
         isFirstStep: row[11] === 'true' || row[11] === true,
         projectId: projectId,
-        projectName: row[2]
+        projectName: row[2],
+        requiresChecklist: row[16] === 'TRUE' || row[16] === true || row[16] === 'true', // Requires_Checklist is column 16
+        checklistItems: checklistItems,
+        attachments: attachments
       });
     }
     
@@ -628,6 +970,37 @@ function getProjectsByUser(username) {
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       if (row[5] === username) {
+        // Parse checklist and attachments from progress sheet
+        // Column mapping: 0: Project_ID, 1: FMS_ID, 2: Project_Name, 3: Step_No, 4: WHAT, 5: WHO, 6: HOW,
+        // 7: Planned_Due_Date, 8: Actual_Completed_On, 9: Status, 10: Completed_By,
+        // 11: Is_First_Step, 12: Created_By, 13: Created_On, 14: Last_Updated_By,
+        // 15: Last_Updated_On, 16: Requires_Checklist, 17: Checklist_Items, 18: Attachments
+        
+        let checklistItems = [];
+        let attachments = [];
+        
+        try {
+          if (row[17]) { // Checklist_Items is column 17
+            checklistItems = JSON.parse(row[17]);
+            // Ensure each checklist item has all required fields
+            if (Array.isArray(checklistItems)) {
+              checklistItems = checklistItems.map(item => ({
+                id: item.id || `checklist-${Date.now()}-${Math.random()}`,
+                text: item.text || '',
+                completed: item.completed === true // Ensure boolean
+              }));
+            }
+          }
+        } catch (e) {
+          Logger.log('Error parsing checklist from progress: ' + e.toString());
+        }
+        
+        try {
+          if (row[18]) attachments = JSON.parse(row[18]); // Attachments is column 18
+        } catch (e) {
+          Logger.log('Error parsing attachments from progress: ' + e.toString());
+        }
+        
         tasks.push({
           rowIndex: i + 1,
           projectId: row[0],
@@ -640,7 +1013,10 @@ function getProjectsByUser(username) {
           actualCompletedOn: row[8],
           status: row[9],
           completedBy: row[10] || '',
-          isFirstStep: row[11] === 'true' || row[11] === true
+          isFirstStep: row[11] === 'true' || row[11] === true,
+          requiresChecklist: row[16] === 'TRUE' || row[16] === true || row[16] === 'true', // Requires_Checklist is column 16
+          checklistItems: checklistItems,
+          attachments: attachments
         });
       }
     }
@@ -655,7 +1031,10 @@ function getProjectsByUser(username) {
   }
 }
 
-function updateTaskStatus(params) {
+/**
+ * Submit progress with attachments - handles file uploads to Drive
+ */
+function submitProgressWithAttachments(params) {
   try {
     const progressSheet = FMS_SS.getSheetByName('FMS_PROGRESS');
     const masterSheet = FMS_SS.getSheetByName('FMS_MASTER');
@@ -664,22 +1043,76 @@ function updateTaskStatus(params) {
       return { success: false, message: 'Required sheets not found' };
     }
     
-    const rowIndex = params.rowIndex;
-    const status = params.status;
-    const username = params.username;
+    const {
+      projectId,
+      fmsId,
+      stepNo,
+      status,
+      username,
+      attachments = [],
+      checklistItems = []
+    } = params;
+    
     const timestamp = new Date().toISOString();
     
+    // Process attachments - upload to Drive if they contain file data
+    const processedAttachments = [];
+    
+    for (const attachment of attachments) {
+      if (attachment.data && attachment.name && attachment.mimeType) {
+        // This is a file that needs to be uploaded
+        const uploadResult = uploadFileToDrive({
+          fileData: attachment.data,
+          fileName: attachment.name,
+          mimeType: attachment.mimeType,
+          uploadedBy: username,
+          context: `FMS-Progress-${projectId}-Step${stepNo}`
+        });
+        
+        if (uploadResult.success) {
+          processedAttachments.push({
+            id: uploadResult.file.id,
+            name: uploadResult.file.name,
+            url: uploadResult.file.url,
+            uploadedOn: uploadResult.file.uploadedOn,
+            uploadedBy: uploadResult.file.uploadedBy
+          });
+        }
+      } else if (attachment.url) {
+        // This is already a Drive file
+        processedAttachments.push(attachment);
+      }
+    }
+    
+    // Find the row to update
+    const data = progressSheet.getDataRange().getValues();
+    let rowIndex = -1;
+    
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (row[0] === projectId && row[3] === stepNo) {
+        rowIndex = i + 1;
+        break;
+      }
+    }
+    
+    if (rowIndex === -1) {
+      return { success: false, message: 'Task not found' };
+    }
+    
+    // Update the task
     progressSheet.getRange(rowIndex, 9).setValue(status === 'Done' ? timestamp : '');
     progressSheet.getRange(rowIndex, 10).setValue(status);
     progressSheet.getRange(rowIndex, 11).setValue(status === 'Done' ? username : '');
     progressSheet.getRange(rowIndex, 15).setValue(username);
     progressSheet.getRange(rowIndex, 16).setValue(timestamp);
+    // Update checklist and attachments in correct columns
+    progressSheet.getRange(rowIndex, 17).setValue(JSON.stringify(checklistItems));
+    progressSheet.getRange(rowIndex, 18).setValue(JSON.stringify(processedAttachments));
     
+    // If task is completed, create next step
     if (status === 'Done') {
-      const currentRow = progressSheet.getRange(rowIndex, 1, 1, 16).getValues()[0];
-      const projectId = currentRow[0];
-      const fmsId = currentRow[1];
-      const projectName = currentRow[2];
+      const currentRow = progressSheet.getRange(rowIndex, 1, 1, 18).getValues()[0];
       const currentStepNo = currentRow[3];
       
       const masterData = masterSheet.getDataRange().getValues();
@@ -688,6 +1121,30 @@ function updateTaskStatus(params) {
       for (let i = 1; i < masterData.length; i++) {
         const row = masterData[i];
         if (row[0] === fmsId) {
+          // Parse checklist and attachments for next step
+          let nextChecklistItems = [];
+          let nextAttachments = [];
+          
+          try {
+            if (row[15]) {
+              nextChecklistItems = JSON.parse(row[15]);
+              // Initialize 'completed' field for next step
+              nextChecklistItems = nextChecklistItems.map(item => ({
+                id: item.id,
+                text: item.text,
+                completed: false // Initialize as not completed
+              }));
+            }
+          } catch (e) {
+            // Ignore
+          }
+          
+          try {
+            if (row[16]) nextAttachments = JSON.parse(row[16]);
+          } catch (e) {
+            // Ignore
+          }
+          
           allSteps.push({
             stepNo: row[2],
             what: row[3],
@@ -695,7 +1152,10 @@ function updateTaskStatus(params) {
             how: row[5],
             when: row[6],
             whenDays: row[8] || Math.floor(row[6]),
-            whenHours: row[9] || Math.round((row[6] % 1) * 24)
+            whenHours: row[9] || Math.round((row[6] % 1) * 24),
+            requiresChecklist: row[14] || false,
+            checklistItems: nextChecklistItems,
+            attachments: nextAttachments
           });
         }
       }
@@ -709,10 +1169,11 @@ function updateTaskStatus(params) {
         completionDate.setDate(completionDate.getDate() + parseInt(nextStep.whenDays));
         completionDate.setHours(completionDate.getHours() + parseInt(nextStep.whenHours));
         
+        // For Progress sheet, include checklist items with 'completed' field
         progressSheet.appendRow([
           projectId,
           fmsId,
-          projectName,
+          currentRow[2], // projectName
           nextStep.stepNo,
           nextStep.what,
           nextStep.who,
@@ -725,18 +1186,23 @@ function updateTaskStatus(params) {
           username,
           timestamp,
           username,
-          timestamp
+          timestamp,
+          nextStep.requiresChecklist || false,
+          JSON.stringify(nextStep.checklistItems || []),
+          JSON.stringify(nextStep.attachments || [])
         ]);
       }
     }
     
     return {
       success: true,
-      message: 'Task updated successfully'
+      message: 'Progress submitted successfully',
+      attachments: processedAttachments
     };
+    
   } catch (error) {
-    Logger.log('Error updating task status: ' + error.toString());
-    return { success: false, message: 'Error updating task status: ' + error.toString() };
+    Logger.log('Error submitting progress: ' + error.toString());
+    return { success: false, message: 'Error submitting progress: ' + error.toString() };
   }
 }
 
@@ -818,6 +1284,156 @@ function getAllLogs() {
   }
 }
 
+/**
+ * Update task status in FMS_PROGRESS sheet
+ */
+function updateTaskStatus(rowIndex, status, username) {
+  try {
+    const progressSheet = FMS_SS.getSheetByName('FMS_PROGRESS');
+    if (!progressSheet) {
+      return { success: false, message: 'FMS_PROGRESS sheet not found' };
+    }
+    
+    // Ensure rowIndex is a valid integer
+    const validRowIndex = parseInt(rowIndex);
+    if (isNaN(validRowIndex) || validRowIndex < 2) {
+      return { success: false, message: 'Invalid row index: ' + rowIndex };
+    }
+    
+    const timestamp = new Date().toISOString();
+    
+    // Update the task status and completion info
+    progressSheet.getRange(validRowIndex, 9).setValue(status === 'Done' ? timestamp : ''); // Actual_Completed_On
+    progressSheet.getRange(validRowIndex, 10).setValue(status); // Status
+    progressSheet.getRange(validRowIndex, 11).setValue(status === 'Done' ? username : ''); // Completed_By
+    progressSheet.getRange(validRowIndex, 15).setValue(username); // Last_Updated_By
+    progressSheet.getRange(validRowIndex, 16).setValue(timestamp); // Last_Updated_On
+    
+    // If task is completed, create next step and check for FMS triggers
+    if (status === 'Done') {
+      const currentRow = progressSheet.getRange(validRowIndex, 1, 1, 20).getValues()[0];  // Extended to column 20
+      const currentStepNo = currentRow[3];
+      const projectId = currentRow[0];
+      const fmsId = currentRow[1];
+      const projectName = currentRow[2];
+      const triggersFMSId = currentRow[19];  // Column 19: Triggers_FMS_ID
+      
+      // Check if this step triggers another FMS
+      if (triggersFMSId && triggersFMSId.toString().trim() !== '') {
+        Logger.log('Step triggers FMS: ' + triggersFMSId);
+        
+        // Auto-create a new project from the triggered FMS
+        const triggeredProjectName = projectName + ' - Auto (from ' + currentRow[4] + ')';
+        const triggeredProjectResult = createProject({
+          fmsId: triggersFMSId,
+          projectName: triggeredProjectName,
+          projectStartDate: timestamp,  // Start immediately
+          username: username
+        });
+        
+        if (triggeredProjectResult.success) {
+          Logger.log('✓ Auto-triggered FMS project: ' + triggeredProjectName);
+        } else {
+          Logger.log('✗ Failed to auto-trigger FMS: ' + triggeredProjectResult.message);
+        }
+      }
+      
+      // Get next step from FMS_MASTER
+      const masterSheet = FMS_SS.getSheetByName('FMS_MASTER');
+      if (masterSheet) {
+        const masterData = masterSheet.getDataRange().getValues();
+        const allSteps = [];
+        
+        for (let i = 1; i < masterData.length; i++) {
+          const row = masterData[i];
+          if (row[0] === fmsId) {
+            // Parse checklist and attachments for next step
+            let nextChecklistItems = [];
+            let nextAttachments = [];
+            
+            try {
+              if (row[15]) {
+                nextChecklistItems = JSON.parse(row[15]);
+                // Initialize 'completed' field for next step
+                nextChecklistItems = nextChecklistItems.map(item => ({
+                  id: item.id,
+                  text: item.text,
+                  completed: false // Initialize as not completed
+                }));
+              }
+            } catch (e) {
+              // Ignore
+            }
+            
+            try {
+              if (row[16]) nextAttachments = JSON.parse(row[16]);
+            } catch (e) {
+              // Ignore
+            }
+            
+            allSteps.push({
+              stepNo: row[2],
+              what: row[3],
+              who: row[4],
+              how: row[5],
+              when: row[6],
+              whenDays: row[8] || Math.floor(row[6]),
+              whenHours: row[9] || Math.round((row[6] % 1) * 24),
+              requiresChecklist: row[14] || false,
+              checklistItems: nextChecklistItems,
+              attachments: nextAttachments,
+              triggersFMSId: row[17] || ''  // Column 17: Triggers_FMS_ID
+            });
+          }
+        }
+        
+        allSteps.sort((a, b) => a.stepNo - b.stepNo);
+        
+        const nextStep = allSteps.find(s => s.stepNo === currentStepNo + 1);
+        
+        if (nextStep) {
+          const completionDate = new Date(timestamp);
+          completionDate.setDate(completionDate.getDate() + parseInt(nextStep.whenDays));
+          completionDate.setHours(completionDate.getHours() + parseInt(nextStep.whenHours));
+          
+          // For Progress sheet, include checklist items with 'completed' field
+          progressSheet.appendRow([
+            projectId,
+            fmsId,
+            currentRow[2], // projectName
+            nextStep.stepNo,
+            nextStep.what,
+            nextStep.who,
+            nextStep.how,
+            completionDate.toISOString(),
+            '',
+            'Pending',
+            '',
+            'false',
+            username,
+            timestamp,
+            username,
+            timestamp,
+            nextStep.requiresChecklist || false,
+            JSON.stringify(nextStep.checklistItems || []),
+            JSON.stringify(nextStep.attachments || []),
+            nextStep.triggersFMSId || ''  // Triggers_FMS_ID
+          ]);
+        }
+      }
+    }
+    
+    return {
+      success: true,
+      message: 'Task status updated successfully'
+    };
+    
+  } catch (error) {
+    Logger.log('Error updating task status: ' + error.toString());
+    return { success: false, message: 'Error updating task status: ' + error.toString() };
+  }
+}
+
 // ===== TASK MANAGEMENT SYSTEM =====
 
 /**
@@ -888,7 +1504,8 @@ function assignTask(taskData) {
       0,
       '',
       '',
-      ''
+      '',
+      JSON.stringify(taskData.attachments || [])  // Attachments column
     ];
     
     sheet.appendRow(newRow);
@@ -910,6 +1527,18 @@ function assignTask(taskData) {
         const subject = `New Task Assigned – ${taskData.description} (Due: ${formattedDate})`;
         const tutorialLink = taskData.tutorialLinks ? 
           `<a href="${taskData.tutorialLinks}" target="_blank">${taskData.tutorialLinks}</a>` : "N/A";
+        
+        // Build attachments HTML if there are any
+        let attachmentsHtml = '';
+        if (taskData.attachments && taskData.attachments.length > 0) {
+          attachmentsHtml = '<tr><td style="border:1px solid #444; padding:8px;"><b>Attachments</b></td><td style="border:1px solid #444; padding:8px;">';
+          taskData.attachments.forEach((att, idx) => {
+            if (att.url && att.name) {
+              attachmentsHtml += `<div>${idx + 1}. <a href="${att.url}" target="_blank">${att.name}</a></div>`;
+            }
+          });
+          attachmentsHtml += '</td></tr>';
+        }
         
         const body = `
         <div style="font-family: Arial, sans-serif; color: #333;">
@@ -945,6 +1574,7 @@ function assignTask(taskData) {
               <td style="border:1px solid #444; padding:8px;"><b>Tutorial Link</b></td>
               <td style="border:1px solid #444; padding:8px;">${tutorialLink}</td>
             </tr>
+            ${attachmentsHtml}
           </table>
           
           <p>Please ensure that the task is completed within the planned schedule.</p>
@@ -992,6 +1622,13 @@ function getTasks(userId, filter) {
         if (header === 'PLANNED DATE' || header === 'completed on') {
           const parsed = parseDMYDate(value);
           task[header] = parsed ? formatDateToISO(parsed) : '';
+        } else if (header.toLowerCase() === 'attachments') {
+          // Parse attachments JSON string
+          try {
+            task[header] = value ? JSON.parse(value) : [];
+          } catch (e) {
+            task[header] = [];
+          }
         } else {
           task[header] = (value || '').toString();
         }
@@ -1658,6 +2295,643 @@ function logFMSActivity(activity) {
     ]);
   } catch (error) {
     Logger.log('logFMSActivity error: ' + error.toString());
+  }
+}
+
+// ======================================
+// OBJECTION SYSTEM
+// ======================================
+
+/**
+ * Get or create the Objections sheet
+ */
+function getObjectionsSheet() {
+  let sheet = FMS_SS.getSheetByName('OBJECTIONS');
+  if (!sheet) {
+    sheet = FMS_SS.insertSheet('OBJECTIONS');
+    sheet.appendRow([
+      'Objection_ID',
+      'Task_ID',
+      'Project_ID',
+      'Task_Description',
+      'Reason',
+      'Raised_By',
+      'Raised_On',
+      'Route_To',
+      'Task_Type',
+      'Status',
+      'Reviewed_By',
+      'Reviewed_On',
+      'Action_Taken',
+      'New_Task_ID'
+    ]);
+  }
+  return sheet;
+}
+
+/**
+ * Raise an objection for a task
+ */
+function raiseObjection(params) {
+  try {
+    const objectionId = 'OBJ' + Date.now();
+    const timestamp = new Date().toISOString();
+    
+    // Determine who to route the objection to
+    let routeTo = params.taskGiver || ''; // Default to task giver
+    
+    if (params.taskType === 'FMS') {
+      // For FMS tasks, route to Step 1 person
+      const progressSheet = FMS_SS.getSheetByName('FMS_PROGRESS');
+      if (progressSheet) {
+        const data = progressSheet.getDataRange().getValues();
+        // Find Step 1 task for this project
+        for (let i = 1; i < data.length; i++) {
+          if (data[i][0] === params.projectId && data[i][3] === 1) {
+            routeTo = data[i][5]; // WHO column
+            break;
+          }
+        }
+      }
+    }
+    
+    const objectionsSheet = getObjectionsSheet();
+    objectionsSheet.appendRow([
+      objectionId,
+      params.taskId,
+      params.projectId || '',
+      params.taskDescription,
+      params.reason,
+      params.raisedBy,
+      timestamp,
+      routeTo,
+      params.taskType,
+      'Pending',
+      '',
+      '',
+      '',
+      ''
+    ]);
+    
+    // Log activity
+    logFMSActivity({
+      type: 'OBJECTION_RAISED',
+      projectId: params.projectId,
+      taskDescription: params.taskDescription,
+      requestedBy: params.raisedBy,
+      timestamp: timestamp
+    });
+    
+    return {
+      success: true,
+      objectionId: objectionId,
+      message: 'Objection raised successfully. Will be reviewed by: ' + routeTo
+    };
+  } catch (error) {
+    Logger.log('raiseObjection error: ' + error.toString());
+    return { success: false, message: 'Error raising objection: ' + error.toString() };
+  }
+}
+
+/**
+ * Get objections for review by a user
+ */
+function getObjections(userId) {
+  try {
+    const objectionsSheet = getObjectionsSheet();
+    const data = objectionsSheet.getDataRange().getValues();
+    
+    if (data.length <= 1) {
+      return { success: true, objections: [] };
+    }
+    
+    const objections = [];
+    
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      // Show objections routed to this user and still pending
+      if (row[7] === userId && row[9] === 'Pending') {
+        objections.push({
+          objectionId: row[0],
+          taskId: row[1],
+          projectId: row[2],
+          taskDescription: row[3],
+          reason: row[4],
+          raisedBy: row[5],
+          raisedOn: row[6],
+          routeTo: row[7],
+          taskType: row[8],
+          status: row[9]
+        });
+      }
+    }
+    
+    return {
+      success: true,
+      objections: objections
+    };
+  } catch (error) {
+    Logger.log('getObjections error: ' + error.toString());
+    return { success: false, message: 'Error getting objections: ' + error.toString() };
+  }
+}
+
+/**
+ * Review an objection (approve terminate, approve replace, or reject)
+ */
+function reviewObjection(params) {
+  try {
+    // Debug logging
+    Logger.log('reviewObjection called with params: ' + JSON.stringify(params));
+    Logger.log('reviewAction type: ' + typeof params.reviewAction);
+    Logger.log('reviewAction value: ' + params.reviewAction);
+    
+    const objectionsSheet = getObjectionsSheet();
+    const data = objectionsSheet.getDataRange().getValues();
+    
+    // Find the objection
+    let objectionRowIndex = -1;
+    let objection = null;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === params.objectionId) {
+        objectionRowIndex = i + 1;
+        objection = data[i];
+        break;
+      }
+    }
+    
+    if (objectionRowIndex === -1) {
+      return { success: false, message: 'Objection not found' };
+    }
+    
+    const timestamp = new Date().toISOString();
+    let newStatus = '';
+    let actionTaken = '';
+    let newTaskId = '';
+    
+    // Normalize action to lowercase string and trim whitespace
+    const action = String(params.reviewAction || '').toLowerCase().trim();
+    Logger.log('Normalized reviewAction: "' + action + '"');
+    
+    // Handle different actions
+    if (action === 'terminate') {
+      newStatus = 'Approved-Terminate';
+      actionTaken = 'Task terminated';
+      
+      // Mark task as terminated in appropriate sheet
+      if (objection[8] === 'FMS') {
+        // Update FMS_PROGRESS
+        const progressSheet = FMS_SS.getSheetByName('FMS_PROGRESS');
+        if (progressSheet) {
+          const progressData = progressSheet.getDataRange().getValues();
+          for (let i = 1; i < progressData.length; i++) {
+            // Match by project ID and step
+            if (progressData[i][0] === objection[2] && progressData[i][3] == objection[1].split('-')[1]) {
+              progressSheet.getRange(i + 1, 10).setValue('Terminated');
+              break;
+            }
+          }
+        }
+      } else {
+        // Update Task Management sheet
+        const taskSheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('Task Management');
+        if (taskSheet) {
+          const taskData = taskSheet.getDataRange().getValues();
+          for (let i = 1; i < taskData.length; i++) {
+            if (taskData[i][0] === objection[1]) {
+              taskSheet.getRange(i + 1, 10).setValue('Terminated');
+              break;
+            }
+          }
+        }
+      }
+      
+    } else if (action === 'replace') {
+      newStatus = 'Approved-Replace';
+      newTaskId = 'TASK' + Date.now();
+      actionTaken = 'Task terminated and new task created: ' + newTaskId;
+      
+      // Terminate old task and create new one
+      if (objection[8] === 'FMS') {
+        // Handle FMS task replacement
+        const progressSheet = FMS_SS.getSheetByName('FMS_PROGRESS');
+        if (progressSheet) {
+          const progressData = progressSheet.getDataRange().getValues();
+          for (let i = 1; i < progressData.length; i++) {
+            if (progressData[i][0] === objection[2] && progressData[i][3] == objection[1].split('-')[1]) {
+              // Terminate old
+              progressSheet.getRange(i + 1, 10).setValue('Terminated');
+              
+              // Create new task with same details
+              progressSheet.appendRow([
+                objection[2], // Project ID
+                progressData[i][1], // FMS ID
+                progressData[i][2], // Project Name
+                progressData[i][3], // Step No
+                progressData[i][4], // WHAT
+                params.newAssignee || progressData[i][5], // WHO (new assignee if provided)
+                progressData[i][6], // HOW
+                params.newDueDate || progressData[i][7], // New due date if provided
+                '',
+                'Pending',
+                '',
+                'false',
+                params.reviewedBy,
+                timestamp,
+                params.reviewedBy,
+                timestamp
+              ]);
+              break;
+            }
+          }
+        }
+      } else {
+        // Handle Task Management replacement
+        const taskSheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('Task Management');
+        if (taskSheet) {
+          const taskData = taskSheet.getDataRange().getValues();
+          for (let i = 1; i < taskData.length; i++) {
+            if (taskData[i][0] === objection[1]) {
+              // Terminate old
+              taskSheet.getRange(i + 1, 10).setValue('Terminated');
+              
+              // Create new task
+              taskSheet.appendRow([
+                newTaskId,
+                taskData[i][1], // GIVEN BY
+                taskData[i][2], // GIVEN TO
+                params.newAssignee || taskData[i][3], // GIVEN TO USER ID
+                taskData[i][4], // TASK DESCRIPTION
+                taskData[i][5], // HOW TO DO
+                taskData[i][6], // DEPARTMENT
+                taskData[i][7], // TASK FREQUENCY
+                params.newDueDate || taskData[i][8], // PLANNED DATE
+                'Pending', // Task Status
+                '', // completed on
+                '', // Task Completed On
+                '', // Revision 1 Date
+                '', // Reason for Revision
+                '' // On time or not
+              ]);
+              break;
+            }
+          }
+        }
+      }
+      
+      
+    } else if (action === 'reject') {
+      newStatus = 'Rejected';
+      actionTaken = 'Objection rejected';
+      
+    } else if (action === 'hold') {
+      newStatus = 'On-Hold';
+      actionTaken = 'Task placed on hold: ' + (params.reason || 'No reason provided');
+      
+      // Mark task as on hold in appropriate sheet
+      if (objection[8] === 'FMS') {
+        // Update FMS_PROGRESS
+        const progressSheet = FMS_SS.getSheetByName('FMS_PROGRESS');
+        if (progressSheet) {
+          const progressData = progressSheet.getDataRange().getValues();
+          for (let i = 1; i < progressData.length; i++) {
+            // Match by project ID and step
+            if (progressData[i][0] === objection[2] && progressData[i][3] == objection[1].split('-')[1]) {
+              progressSheet.getRange(i + 1, 10).setValue('On-Hold');
+              break;
+            }
+          }
+        }
+      } else {
+        // Update Task Management sheet
+        const taskSheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('Task Management');
+        if (taskSheet) {
+          const taskData = taskSheet.getDataRange().getValues();
+          for (let i = 1; i < taskData.length; i++) {
+            if (taskData[i][0] === objection[1]) {
+              taskSheet.getRange(i + 1, 10).setValue('On-Hold');
+              break;
+            }
+          }
+        }
+      }
+      
+    } else {
+      // Invalid reviewAction
+      Logger.log('ERROR: Invalid reviewAction received: "' + action + '"');
+      return { 
+        success: false, 
+        message: 'Invalid reviewAction: "' + action + '". Valid actions are: terminate, replace, reject, hold' 
+      };
+    }
+    
+    // Update objection record
+    objectionsSheet.getRange(objectionRowIndex, 10).setValue(newStatus); // Status
+    objectionsSheet.getRange(objectionRowIndex, 11).setValue(params.reviewedBy); // Reviewed By
+    objectionsSheet.getRange(objectionRowIndex, 12).setValue(timestamp); // Reviewed On
+    objectionsSheet.getRange(objectionRowIndex, 13).setValue(actionTaken); // Action Taken
+    objectionsSheet.getRange(objectionRowIndex, 14).setValue(newTaskId); // New Task ID
+    
+    // Log activity
+    logFMSActivity({
+      type: 'OBJECTION_' + action.toUpperCase(),
+      projectId: objection[2],
+      taskDescription: objection[3],
+      approvedBy: params.reviewedBy,
+      timestamp: timestamp
+    });
+    
+    return {
+      success: true,
+      message: 'Objection reviewed successfully',
+      newTaskId: newTaskId || null
+    };
+  } catch (error) {
+    Logger.log('reviewObjection error: ' + error.toString());
+    return { success: false, message: 'Error reviewing objection: ' + error.toString() };
+  }
+}
+
+// ======================================
+// GOOGLE DRIVE FILE UPLOAD SYSTEM
+// ======================================
+
+/**
+ * Get or create FMS Attachments folder in Drive
+ * You can replace 'FMS_Attachments' with your specific folder ID
+ */
+function getFMSAttachmentsFolder() {
+  // Replace this with your specific folder ID if you have one
+  const SPECIFIC_FOLDER_ID = '1B0f2XuDBo46mTktl9oP9zNtwnpWxbH1N'; // Replace with actual folder ID
+  
+  if (SPECIFIC_FOLDER_ID !== 'YOUR_FOLDER_ID_HERE') {
+    try {
+      const folder = DriveApp.getFolderById(SPECIFIC_FOLDER_ID);
+      Logger.log('Using specific folder: ' + folder.getName() + ' - ' + folder.getId());
+      return folder;
+    } catch (e) {
+      Logger.log('Specific folder not found, creating new one: ' + e.toString());
+    }
+  }
+  
+  // Fallback: create or find FMS_Attachments folder
+  const folderName = 'FMS_Attachments';
+  const folders = DriveApp.getFoldersByName(folderName);
+  
+  if (folders.hasNext()) {
+    return folders.next();
+  }
+  
+  const folder = DriveApp.createFolder(folderName);
+  folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  
+  Logger.log('Created folder: ' + folder.getName() + ' - ' + folder.getId());
+  return folder;
+}
+
+/**
+ * Upload single file to Google Drive
+ */
+function uploadFileToDrive(params) {
+  try {
+    const { fileData, fileName, mimeType, uploadedBy, context } = params;
+    
+    // Validation
+    if (!fileData || !fileName) {
+      return { success: false, message: 'Missing file data or filename' };
+    }
+    
+    // File size check (50MB limit for Apps Script)
+    const maxSize = 50 * 1024 * 1024;
+    const estimatedSize = (fileData.length * 3) / 4; // Base64 to bytes
+    
+    if (estimatedSize > maxSize) {
+      return { 
+        success: false, 
+        message: 'File too large. Max 50MB. Current: ' + Math.round(estimatedSize / 1024 / 1024) + 'MB' 
+      };
+    }
+    
+    // Sanitize filename
+    const safeName = fileName
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .substring(0, 100);
+    
+    // Get main folder
+    const mainFolder = getFMSAttachmentsFolder();
+    
+    // Create context subfolder
+    let contextFolder;
+    const subfolderName = context || 'General';
+    const contextFolders = mainFolder.getFoldersByName(subfolderName);
+    
+    if (contextFolders.hasNext()) {
+      contextFolder = contextFolders.next();
+    } else {
+      contextFolder = mainFolder.createFolder(subfolderName);
+      contextFolder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    }
+    
+    // Decode base64 and create blob
+    const blob = Utilities.newBlob(
+      Utilities.base64Decode(fileData),
+      mimeType,
+      safeName
+    );
+    
+    // Upload to Drive
+    const file = contextFolder.createFile(blob);
+    
+    // Set permissions
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    // Get file info
+    const fileId = file.getId();
+    const fileUrl = file.getUrl();
+    const viewUrl = 'https://drive.google.com/file/d/' + fileId + '/view';
+    const downloadUrl = 'https://drive.google.com/uc?export=download&id=' + fileId;
+    const fileSize = file.getSize();
+    const timestamp = new Date().toISOString();
+    
+    // Log upload
+    logFileUpload({
+      fileId: fileId,
+      fileName: safeName,
+      fileUrl: fileUrl,
+      fileSize: fileSize,
+      mimeType: mimeType,
+      uploadedBy: uploadedBy,
+      uploadedOn: timestamp,
+      context: context
+    });
+    
+    Logger.log('File uploaded: ' + safeName + ' - ID: ' + fileId);
+    
+    return {
+      success: true,
+      file: {
+        id: fileId,
+        name: safeName,
+        url: viewUrl,
+        downloadUrl: downloadUrl,
+        size: fileSize,
+        mimeType: mimeType,
+        uploadedBy: uploadedBy,
+        uploadedOn: timestamp
+      },
+      message: 'File uploaded successfully to Drive'
+    };
+    
+  } catch (error) {
+    Logger.log('uploadFileToDrive error: ' + error.toString());
+    return { 
+      success: false, 
+      message: 'Upload failed: ' + error.toString() 
+    };
+  }
+}
+
+/**
+ * Upload multiple files at once
+ */
+function uploadMultipleFiles(params) {
+  try {
+    const { files, uploadedBy, context } = params;
+    
+    if (!files || files.length === 0) {
+      return { success: false, message: 'No files provided' };
+    }
+    
+    const results = [];
+    const errors = [];
+    
+    for (let i = 0; i < files.length; i++) {
+      const fileData = files[i];
+      
+      const result = uploadFileToDrive({
+        fileData: fileData.data,
+        fileName: fileData.name,
+        mimeType: fileData.mimeType,
+        uploadedBy: uploadedBy,
+        context: context
+      });
+      
+      if (result.success) {
+        results.push(result.file);
+      } else {
+        errors.push(fileData.name + ': ' + result.message);
+      }
+      
+      // Small delay to avoid quota issues
+      if (i < files.length - 1) {
+        Utilities.sleep(100);
+      }
+    }
+    
+    return {
+      success: results.length > 0,
+      files: results,
+      errors: errors,
+      message: 'Uploaded ' + results.length + ' of ' + files.length + ' files' +
+               (errors.length > 0 ? '. Errors: ' + errors.join('; ') : '')
+    };
+    
+  } catch (error) {
+    Logger.log('uploadMultipleFiles error: ' + error.toString());
+    return { 
+      success: false, 
+      message: 'Batch upload failed: ' + error.toString() 
+    };
+  }
+}
+
+/**
+ * Delete/trash file from Drive
+ */
+function deleteFileFromDrive(params) {
+  try {
+    const { fileId } = params;
+    
+    if (!fileId) {
+      return { success: false, message: 'File ID required' };
+    }
+    
+    const file = DriveApp.getFileById(fileId);
+    file.setTrashed(true); // Move to trash (recoverable)
+    
+    Logger.log('File trashed: ' + fileId);
+    
+    return {
+      success: true,
+      message: 'File moved to trash'
+    };
+    
+  } catch (error) {
+    Logger.log('deleteFileFromDrive error: ' + error.toString());
+    return { 
+      success: false, 
+      message: 'Delete failed: ' + error.toString() 
+    };
+  }
+}
+
+/**
+ * Get file metadata by ID
+ */
+function getFileMetadata(params) {
+  try {
+    const { fileId } = params;
+    const file = DriveApp.getFileById(fileId);
+    
+    return {
+      success: true,
+      file: {
+        id: file.getId(),
+        name: file.getName(),
+        url: file.getUrl(),
+        size: file.getSize(),
+        mimeType: file.getMimeType(),
+        createdDate: file.getDateCreated().toISOString(),
+        modifiedDate: file.getLastUpdated().toISOString()
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'File not found or inaccessible'
+    };
+  }
+}
+
+/**
+ * Log file uploads to tracking sheet
+ */
+function logFileUpload(uploadData) {
+  try {
+    let logsSheet = FMS_SS.getSheetByName('FILE_UPLOADS_LOG');
+    
+    if (!logsSheet) {
+      logsSheet = FMS_SS.insertSheet('FILE_UPLOADS_LOG');
+      logsSheet.appendRow([
+        'File_ID', 'File_Name', 'File_URL', 'File_Size', 'MIME_Type',
+        'Uploaded_By', 'Uploaded_On', 'Context', 'Folder_Path'
+      ]);
+    }
+    
+    logsSheet.appendRow([
+      uploadData.fileId,
+      uploadData.fileName,
+      uploadData.fileUrl,
+      uploadData.fileSize,
+      uploadData.mimeType,
+      uploadData.uploadedBy,
+      uploadData.uploadedOn,
+      uploadData.context || 'General',
+      'FMS_Attachments/' + (uploadData.context || 'General')
+    ]);
+    
+  } catch (error) {
+    Logger.log('logFileUpload error: ' + error.toString());
   }
 }
 

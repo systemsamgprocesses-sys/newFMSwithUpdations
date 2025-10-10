@@ -1,6 +1,6 @@
-# Advanced Flow Management System (FMS)
+# Advanced Task Management System (TMS/FMS)
 
-A comprehensive workflow management system that uses Google Sheets as a database backend and provides a modern React frontend for creating and managing workflow templates and projects.
+A comprehensive task and workflow management system that uses Google Sheets as a database backend and provides a modern React frontend for creating and managing workflow templates and projects.
 
 ## Features
 

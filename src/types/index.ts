@@ -1,3 +1,17 @@
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+export interface Attachment {
+  id: string;
+  name: string;
+  url: string;
+  uploadedBy: string;
+  uploadedOn: string;
+}
+
 export interface FMSStep {
   stepNo: number;
   what: string;
@@ -7,6 +21,10 @@ export interface FMSStep {
   whenUnit: 'days' | 'hours' | 'days+hours';
   whenDays?: number;
   whenHours?: number;
+  requiresChecklist?: boolean;
+  checklistItems?: ChecklistItem[];
+  attachments?: Attachment[];
+  triggersFMSId?: string;  // FMS to automatically trigger when this step completes
 }
 
 export interface FMSTemplate {
@@ -15,6 +33,9 @@ export interface FMSTemplate {
   stepCount: number;
   createdBy: string;
   createdOn: string;
+  totalDays?: number;
+  totalHours?: number;
+  totalTimeFormatted?: string;
 }
 
 export interface FMSDetail {
@@ -37,12 +58,16 @@ export interface ProjectTask {
   isFirstStep?: boolean;
   isOverdue?: boolean;
   completionStatus?: 'on-time' | 'late';
+  requiresChecklist?: boolean;
+  checklistItems?: ChecklistItem[];
+  attachments?: Attachment[];
 }
 
 export interface Project {
   projectId: string;
   fmsId: string;
   projectName: string;
+  totalStepsInTemplate?: number;
   tasks: ProjectTask[];
 }
 
@@ -95,6 +120,7 @@ export interface TaskData {
   'Revision 1 Date'?: string;
   'Reason for Revision'?: string;
   'On time or not?'?: string;
+  'Attachments'?: Attachment[] | string; // Can be array or JSON string
   [key: string]: any;
 }
 
@@ -126,4 +152,20 @@ export interface ScoringData {
   scoresImpacted: number;
   totalScoreSum: number;
   finalScore: number;
+}
+
+export interface Objection {
+  objectionId: string;
+  taskId: string;
+  projectId?: string;
+  taskDescription: string;
+  reason: string;
+  raisedBy: string;
+  raisedOn: string;
+  reviewedBy?: string;
+  reviewedOn?: string;
+  status: 'Pending' | 'Approved-Terminate' | 'Approved-Replace' | 'Rejected';
+  actionTaken?: string;
+  taskType: 'FMS' | 'TASK_MANAGEMENT';
+  routeTo: string; // username of reviewer
 }

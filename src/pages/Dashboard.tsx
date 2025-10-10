@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckSquare, Loader, Calendar, ListChecks, AlertCircle, TrendingUp, Target, X, Edit } from 'lucide-react';
+import { CheckSquare, Loader, Calendar, ListChecks, AlertCircle, TrendingUp, Target, X, Edit, Paperclip, ExternalLink, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
+import { useAlert } from '../context/AlertContext';
 import { api } from '../services/api';
 import { ProjectTask, TaskData } from '../types';
 
@@ -21,6 +22,19 @@ interface UnifiedTask {
   createdBy?: string;
 }
 
+// Helper function to safely get attachments from a task
+const getTaskAttachments = (task: UnifiedTask): any[] => {
+  if (task.type === 'FMS') {
+    return (task.source as ProjectTask).attachments || [];
+  } else {
+    const attachments = (task.source as TaskData).Attachments;
+    if (Array.isArray(attachments)) {
+      return attachments;
+    }
+    return [];
+  }
+};
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { 
@@ -31,19 +45,25 @@ export default function Dashboard() {
     error: fmsError,
     setError
   } = useData();
+  const { showSuccess, showError, showWarning, showInfo } = useAlert();
   const navigate = useNavigate();
   const [updating, setUpdating] = useState<string | null>(null);
 
   // Task Management state
   const [tmTasks, setTmTasks] = useState<TaskData[]>([]);
   const [tmLoading, setTmLoading] = useState(false);
+  const [taskUsers, setTaskUsers] = useState<any[]>([]);
 
   // FMS Revisions state
   const [fmsRevisions, setFmsRevisions] = useState<any[]>([]);
   const [revisionsLoading, setRevisionsLoading] = useState(false);
 
+  // Objections state
+  const [objections, setObjections] = useState<any[]>([]);
+  const [objectionsLoading, setObjectionsLoading] = useState(false);
+
   // Unified state
-  const [activeTab, setActiveTab] = useState<'all' | 'fms' | 'tm' | 'due' | 'revisions'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'fms' | 'tm' | 'due' | 'revisions' | 'objections'>('all');
 
   // Modal state
   const [showRevisionModal, setShowRevisionModal] = useState(false);
@@ -52,6 +72,16 @@ export default function Dashboard() {
     newDate: '',
     reason: ''
   });
+
+  // Checklist modal
+  const [showChecklistModal, setShowChecklistModal] = useState(false);
+  const [checklistItems, setChecklistItems] = useState<any[]>([]);
+  const [taskToComplete, setTaskToComplete] = useState<UnifiedTask | null>(null);
+  
+  // Attachment modal
+  const [showAttachmentModal, setShowAttachmentModal] = useState(false);
+  const [selectedTaskAttachments, setSelectedTaskAttachments] = useState<any[]>([]);
+  const [selectedTaskForAttachments, setSelectedTaskForAttachments] = useState<UnifiedTask | null>(null);
   
   // Confirmation modals
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -60,6 +90,21 @@ export default function Dashboard() {
     revision: any;
   } | null>(null);
   
+  // Hold options modal
+  const [showHoldModal, setShowHoldModal] = useState(false);
+  const [selectedObjectionForHold, setSelectedObjectionForHold] = useState<any>(null);
+  const [holdAction, setHoldAction] = useState<'terminate' | 'replace' | 'hold' | 'reject'>('terminate');
+  const [holdData, setHoldData] = useState({
+    newAssignee: '',
+    newDueDate: '',
+    reason: ''
+  });
+
+  // Objection modal
+  const [showObjectionModal, setShowObjectionModal] = useState(false);
+  const [selectedTaskForObjection, setSelectedTaskForObjection] = useState<UnifiedTask | null>(null);
+  const [objectionReason, setObjectionReason] = useState('');
+  
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
@@ -67,6 +112,7 @@ export default function Dashboard() {
       loadMyTasks(user.username);
       loadTaskManagementData();
       loadFMSRevisions();
+      loadObjections();
     }
   }, [user?.username]);
 
@@ -78,6 +124,12 @@ export default function Dashboard() {
       const tasksResult = await api.getTasks(user.username, 'all');
       if (tasksResult.success) {
         setTmTasks(tasksResult.tasks || []);
+      }
+      
+      // Load task users for objection modal
+      const usersResult = await api.getTaskUsers();
+      if (usersResult.success) {
+        setTaskUsers(usersResult.users || []);
       }
     } catch (err: any) {
       console.error('Error loading Task Management data:', err);
@@ -99,6 +151,22 @@ export default function Dashboard() {
       console.error('Error loading FMS revisions:', err);
     } finally {
       setRevisionsLoading(false);
+    }
+  };
+
+  const loadObjections = async () => {
+    if (!user?.username) return;
+    
+    setObjectionsLoading(true);
+    try {
+      const result = await api.getObjections(user.username);
+      if (result.success) {
+        setObjections(result.objections || []);
+      }
+    } catch (err: any) {
+      console.error('Error loading objections:', err);
+    } finally {
+      setObjectionsLoading(false);
     }
   };
 
@@ -198,6 +266,35 @@ export default function Dashboard() {
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   const handleCompleteTask = async (task: UnifiedTask) => {
+    // Check if task requires checklist
+    const fmsTask = task.type === 'FMS' ? (task.source as ProjectTask) : null;
+    
+    // Debug logging
+    console.log('🔍 Completing task:', task);
+    console.log('🔍 Is FMS task?', task.type === 'FMS');
+    console.log('🔍 Task source:', fmsTask);
+    console.log('🔍 Requires checklist?', fmsTask?.requiresChecklist);
+    console.log('🔍 Checklist items:', fmsTask?.checklistItems);
+    
+    const hasChecklist = fmsTask?.requiresChecklist && fmsTask?.checklistItems && fmsTask.checklistItems.length > 0;
+    
+    console.log('🔍 Has checklist?', hasChecklist);
+    
+    if (hasChecklist) {
+      console.log('✅ Showing checklist modal!');
+      // Show checklist modal
+      setTaskToComplete(task);
+      setChecklistItems(fmsTask!.checklistItems!.map(item => ({ ...item, completed: false })));
+      setShowChecklistModal(true);
+      return;
+    }
+
+    console.log('⚠️ No checklist, completing directly');
+    // If no checklist, complete directly
+    await completeTaskDirectly(task);
+  };
+
+  const completeTaskDirectly = async (task: UnifiedTask) => {
     setUpdating(task.id);
     try {
       if (task.type === 'FMS') {
@@ -206,32 +303,83 @@ export default function Dashboard() {
         
         const result = await api.updateTaskStatus(fmsTask.rowIndex, 'Done', user!.username);
         if (result.success) {
+          showSuccess('Task completed successfully!');
           await loadMyTasks(user!.username);
           await loadTaskManagementData();
+          setShowChecklistModal(false);
+          setTaskToComplete(null);
         } else {
-          setError(result.message || 'Failed to update task');
+          showError(result.message || 'Failed to update task');
         }
       } else {
         const tmTask = task.source as TaskData;
         const result = await api.updateTask(tmTask['Task Id'], 'complete', {});
         
         if (result.success) {
+          showSuccess('Task completed successfully!');
           await loadTaskManagementData();
         } else {
-          setError(result.message || 'Failed to update task');
+          showError(result.message || 'Failed to update task');
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to update task');
+      showError(err.message || 'Failed to update task');
     } finally {
       setUpdating(null);
     }
+  };
+
+  const toggleChecklistItem = (itemId: string) => {
+    setChecklistItems(prev => 
+      prev.map(item => 
+        item.id === itemId ? { ...item, completed: !item.completed } : item
+      )
+    );
+  };
+
+  const allChecklistItemsCompleted = () => {
+    return checklistItems.every(item => item.completed);
   };
 
   const handleReviseTask = (task: UnifiedTask) => {
     setSelectedTask(task);
     setRevisionData({ newDate: '', reason: '' });
     setShowRevisionModal(true);
+  };
+
+  const handleRaiseObjection = async () => {
+    if (!selectedTaskForObjection || !objectionReason.trim()) {
+      setError('Please provide a reason for objection');
+      return;
+    }
+
+    setUpdating(selectedTaskForObjection.id);
+    try {
+      const task = selectedTaskForObjection;
+      
+      const result = await api.raiseObjection({
+        taskId: task.type === 'FMS' ? `${task.projectName}-${(task.source as ProjectTask).stepNo}` : (task.source as TaskData)['Task Id'],
+        projectId: task.projectName,
+        taskDescription: task.title,
+        reason: objectionReason,
+        raisedBy: user!.username,
+        taskType: task.type,
+        taskGiver: task.createdBy
+      });
+
+      if (result.success) {
+        setShowObjectionModal(false);
+        showSuccess('Objection raised successfully! ' + result.message);
+        setObjectionReason('');
+        setSelectedTaskForObjection(null);
+      } else {
+        showError(result.message || 'Failed to raise objection');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to raise objection');
+    } finally {
+      setUpdating(null);
+    }
   };
 
   const submitRevision = async () => {
@@ -300,6 +448,93 @@ export default function Dashboard() {
       setError(err.message || 'Failed to request revision');
     } finally {
       setUpdating(null);
+    }
+  };
+
+  const handleHoldAction = (objection: any, action: 'terminate' | 'replace' | 'hold' | 'reject') => {
+    setSelectedObjectionForHold(objection);
+    setHoldAction(action);
+    setHoldData({ newAssignee: '', newDueDate: '', reason: '' });
+    setShowHoldModal(true);
+  };
+
+  const executeHoldAction = async () => {
+    if (!selectedObjectionForHold) return;
+
+    // Validate required fields
+    if (!holdData.reason.trim()) {
+      showError('Please provide a reason for this action');
+      return;
+    }
+
+    setUpdating(selectedObjectionForHold.objectionId);
+
+    try {
+      let result;
+      
+      if (holdAction === 'reject') {
+        result = await api.reviewObjection({
+          objectionId: selectedObjectionForHold.objectionId,
+          reviewAction: 'reject',
+          reviewedBy: user!.username,
+          reason: holdData.reason
+        });
+      } else if (holdAction === 'terminate') {
+        result = await api.reviewObjection({
+          objectionId: selectedObjectionForHold.objectionId,
+          reviewAction: 'terminate',
+          reviewedBy: user!.username,
+          reason: holdData.reason
+        });
+      } else if (holdAction === 'replace') {
+        result = await api.reviewObjection({
+          objectionId: selectedObjectionForHold.objectionId,
+          reviewAction: 'replace',
+          reviewedBy: user!.username,
+          newAssignee: holdData.newAssignee || undefined,
+          newDueDate: holdData.newDueDate || undefined,
+          reason: holdData.reason
+        });
+      } else if (holdAction === 'hold') {
+        result = await api.reviewObjection({
+          objectionId: selectedObjectionForHold.objectionId,
+          reviewAction: 'hold',
+          reviewedBy: user!.username,
+          reason: holdData.reason
+        });
+      }
+
+      if (result?.success) {
+        let message = '';
+        switch (holdAction) {
+          case 'reject':
+            message = 'Objection rejected';
+            break;
+          case 'terminate':
+            message = 'Task terminated successfully';
+            break;
+          case 'replace':
+            message = `Task terminated and new task created: ${result.newTaskId || 'new task'}`;
+            break;
+          case 'hold':
+            message = 'Task put on hold';
+            break;
+        }
+        
+        setShowHoldModal(false);
+        showSuccess(message);
+        await loadObjections();
+        await loadMyTasks(user!.username);
+      } else {
+        showError(result?.message || `Failed to ${holdAction} task`);
+      }
+    } catch (err: any) {
+      console.error('Objection action error:', err);
+      showError(err.message || `Failed to ${holdAction} task`);
+    } finally {
+      setUpdating(null);
+      setSelectedObjectionForHold(null);
+      setHoldData({ newAssignee: '', newDueDate: '', reason: '' });
     }
   };
 
@@ -510,7 +745,19 @@ export default function Dashboard() {
                 }`}
               >
                 <Edit className="w-4 h-4" />
-                FMS Revisions ({fmsRevisions.length})
+                Revisions ({fmsRevisions.length})
+            </button>
+
+            <button
+                onClick={() => setActiveTab('objections')}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-sm sm:text-base ${
+                  activeTab === 'objections'
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                <AlertCircle className="w-4 h-4" />
+                Objections ({objections.length})
             </button>
             </div>
           </div>
@@ -593,6 +840,90 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+          ) : activeTab === 'objections' ? (
+            // Objections Section
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 mb-4">Objection Reviews</h2>
+              {objectionsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader className="w-8 h-8 animate-spin text-slate-600" />
+                </div>
+              ) : objections.length === 0 ? (
+                <div className="text-center py-12 text-slate-600">
+                  <AlertCircle className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium">No pending objections</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {objections.map((objection) => (
+                    <div key={objection.objectionId} className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <div className="flex flex-col gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-start gap-2 mb-2">
+                            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                              <h3 className="font-bold text-slate-900 mb-1">
+                                {objection.taskDescription}
+                              </h3>
+                              <p className="text-sm text-red-700">
+                                <strong>Type:</strong> {objection.taskType === 'FMS' ? 'FMS Project Task' : 'Assigned Task'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="bg-white p-3 rounded-lg mb-3">
+                            <p className="text-sm text-slate-700 mb-2">
+                              <strong>Reason for Objection:</strong>
+                            </p>
+                            <p className="text-sm text-slate-900">{objection.reason}</p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                            <p><strong>Raised by:</strong> {objection.raisedBy}</p>
+                            <p><strong>Raised on:</strong> {formatDate(objection.raisedOn)}</p>
+                            {objection.projectId && (
+                              <p><strong>Project:</strong> {objection.projectId}</p>
+                            )}
+                            <p><strong>Task ID:</strong> {objection.taskId}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <button
+                            onClick={() => handleHoldAction(objection, 'reject')}
+                            disabled={updating === objection.objectionId}
+                            className="flex-1 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors text-sm disabled:opacity-50"
+                          >
+                            Reject Objection
+                          </button>
+                          <button
+                            onClick={() => handleHoldAction(objection, 'terminate')}
+                            disabled={updating === objection.objectionId}
+                            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm disabled:opacity-50"
+                          >
+                            Terminate Task
+                          </button>
+                          <button
+                            onClick={() => handleHoldAction(objection, 'replace')}
+                            disabled={updating === objection.objectionId}
+                            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm disabled:opacity-50"
+                          >
+                            Terminate & Create New
+                          </button>
+                          <button
+                            onClick={() => handleHoldAction(objection, 'hold')}
+                            disabled={updating === objection.objectionId}
+                            className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm disabled:opacity-50"
+                          >
+                            Hold Task
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : filteredTasks.length === 0 ? (
             <div className="text-center py-12 text-slate-600">
               <CheckSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
@@ -614,7 +945,7 @@ export default function Dashboard() {
                   <tr>
                     <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Type</th>
                     <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Task</th>
-                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase hidden sm:table-cell">Project/Dept</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase hidden sm:table-cell">Particulars</th>
                     <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Due Date</th>
                     <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Status</th>
                     <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-700 uppercase">Actions</th>
@@ -633,6 +964,55 @@ export default function Dashboard() {
                         {task.description && (
                           <div className="text-xs text-slate-500 mt-1 truncate max-w-xs">{task.description}</div>
                         )}
+                        
+                        {/* Show checklist items if any */}
+                        {task.type === 'FMS' && (task.source as ProjectTask).requiresChecklist && (task.source as ProjectTask).checklistItems && (task.source as ProjectTask).checklistItems!.length > 0 && (
+                          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+                            <div className="flex items-center gap-1 mb-1">
+                              <CheckSquare className="w-3 h-3 text-blue-600" />
+                              <span className="text-blue-800 font-medium">Checklist:</span>
+                            </div>
+                            <div className="space-y-1">
+                              {(task.source as ProjectTask).checklistItems!.slice(0, 2).map((item: any, idx: number) => (
+                                <div key={idx} className="flex items-center gap-1">
+                                  <div className={`w-3 h-3 rounded border flex items-center justify-center ${
+                                    item.completed ? 'bg-green-600 border-green-600' : 'bg-white border-slate-300'
+                                  }`}>
+                                    {item.completed && <CheckCircle className="w-2 h-2 text-white" />}
+                                  </div>
+                                  <span className={`text-xs ${item.completed ? 'line-through text-green-700' : 'text-slate-700'}`}>
+                                    {item.text}
+                                  </span>
+                                </div>
+                              ))}
+                              {(task.source as ProjectTask).checklistItems!.length > 2 && (
+                                <div className="text-xs text-blue-600 font-medium">
+                                  +{(task.source as ProjectTask).checklistItems!.length - 2} more items
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Show attachments if any */}
+                        {(() => {
+                          const attachments = getTaskAttachments(task);
+                          return attachments.length > 0 && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <Paperclip className="w-3 h-3 text-blue-600" />
+                              <button
+                                onClick={() => {
+                                  setSelectedTaskForAttachments(task);
+                                  setSelectedTaskAttachments(attachments);
+                                  setShowAttachmentModal(true);
+                                }}
+                                className="text-xs text-blue-600 font-medium hover:text-blue-800 hover:underline cursor-pointer"
+                              >
+                                {attachments.length} attachment(s) - Click to view
+                              </button>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 sm:px-4 py-3 text-sm text-slate-600 hidden sm:table-cell">
                         {task.projectName || task.department || 'N/A'}
@@ -653,7 +1033,7 @@ export default function Dashboard() {
                       </td>
                       <td className="px-3 sm:px-4 py-3">
                         {(task.status !== 'Done' && task.status.toLowerCase() !== 'completed') && (
-                          <div className="flex gap-1 sm:gap-2">
+                          <div className="flex flex-wrap gap-1 sm:gap-2">
                             <button
                               onClick={() => handleCompleteTask(task)}
                               disabled={updating === task.id}
@@ -661,14 +1041,26 @@ export default function Dashboard() {
                             >
                               {updating === task.id ? <Loader className="w-3 h-3 animate-spin" /> : 'Complete'}
                             </button>
-                        <button
+                            <button
                               onClick={() => handleReviseTask(task)}
                               disabled={updating === task.id}
                               className="px-2 sm:px-3 py-1 bg-orange-600 text-white rounded text-xs hover:bg-orange-700 transition-colors disabled:opacity-50"
                             >
                               Revise
-                        </button>
-                      </div>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedTaskForObjection(task);
+                                setObjectionReason('');
+                                setShowObjectionModal(true);
+                              }}
+                              disabled={updating === task.id}
+                              className="px-2 sm:px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-colors disabled:opacity-50"
+                              title="Raise Objection"
+                            >
+                              Objection
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -701,6 +1093,7 @@ export default function Dashboard() {
                 loadMyTasks(user!.username);
                 loadTaskManagementData();
                 loadFMSRevisions();
+                loadObjections();
               }}
               className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-slate-600 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors text-sm sm:text-base"
             >
@@ -794,6 +1187,238 @@ export default function Dashboard() {
                                       </div>
                                     )}
 
+      {/* Objection Modal */}
+      {showObjectionModal && selectedTaskForObjection && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-slate-900">Raise Objection</h3>
+              <button
+                onClick={() => setShowObjectionModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-900 mb-2">
+                ⚠️ <strong>Warning:</strong> Raising an objection will route this task for review.
+              </p>
+              <p className="text-xs text-red-700">
+                {selectedTaskForObjection.type === 'FMS' 
+                  ? 'This will be sent to the Step 1 person for review.'
+                  : 'This will be sent to the task giver for review.'}
+              </p>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-sm text-slate-600 mb-2">
+                <strong>Task:</strong> {selectedTaskForObjection.title}
+              </p>
+              <p className="text-sm text-slate-600 mb-2">
+                <strong>Type:</strong> {selectedTaskForObjection.type === 'FMS' ? 'FMS Project Task' : 'Assigned Task'}
+              </p>
+              <p className="text-sm text-slate-600">
+                <strong>Due Date:</strong> {formatDate(selectedTaskForObjection.dueDate)}
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Reason for Objection <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={objectionReason}
+                  onChange={(e) => setObjectionReason(e.target.value)}
+                  required
+                  rows={5}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  placeholder="Explain why you're raising an objection (e.g., unclear requirements, missing resources, impossible deadline)..."
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Be specific and provide details to help the reviewer understand your concerns.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowObjectionModal(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRaiseObjection}
+                disabled={!objectionReason.trim() || !!updating}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {updating ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Raising Objection...
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-4 h-4" />
+                    Raise Objection
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Checklist Completion Modal */}
+      {showChecklistModal && taskToComplete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-slate-900">Complete Checklist</h3>
+              <button
+                onClick={() => {
+                  setShowChecklistModal(false);
+                  setTaskToComplete(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-900 mb-2">
+                ℹ️ <strong>This task requires checklist completion</strong>
+              </p>
+              <p className="text-xs text-blue-700">
+                Please check all items below before completing the task.
+              </p>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-sm text-slate-600 mb-2">
+                <strong>Task:</strong> {taskToComplete.title}
+              </p>
+              <p className="text-sm text-slate-600">
+                <strong>Type:</strong> FMS Project Task
+              </p>
+              
+              {/* Show attachments if any */}
+              {(() => {
+                const attachments = getTaskAttachments(taskToComplete);
+                return attachments.length > 0 && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm font-medium text-blue-900 mb-2 flex items-center gap-2">
+                      <Paperclip className="w-4 h-4" />
+                      Attachments:
+                    </p>
+                    <div className="space-y-1">
+                      {attachments.map((att: any, idx: number) => (
+                        <a
+                          key={idx}
+                          href={att.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 hover:underline"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          {att.name}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
+              <h4 className="font-semibold text-slate-900 mb-3">Checklist Items:</h4>
+              {checklistItems.map((item, index) => (
+                <div
+                  key={item.id}
+                  className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-all cursor-pointer ${
+                    item.completed 
+                      ? 'bg-green-50 border-green-300' 
+                      : 'bg-slate-50 border-slate-200 hover:border-blue-300'
+                  }`}
+                  onClick={() => toggleChecklistItem(item.id)}
+                >
+                  <div className="flex-shrink-0 mt-1">
+                    <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
+                      item.completed
+                        ? 'bg-green-600 border-green-600'
+                        : 'bg-white border-slate-300'
+                    }`}>
+                      {item.completed && (
+                        <CheckCircle className="w-4 h-4 text-white" />
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-sm font-medium ${
+                      item.completed ? 'text-green-900 line-through' : 'text-slate-900'
+                    }`}>
+                      {index + 1}. {item.text}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mb-4">
+              <div className="flex items-center justify-between p-3 bg-slate-100 rounded-lg">
+                <span className="text-sm font-medium text-slate-700">Progress:</span>
+                <span className="text-sm font-bold text-slate-900">
+                  {checklistItems.filter(i => i.completed).length} / {checklistItems.length} items completed
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowChecklistModal(false);
+                  setTaskToComplete(null);
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (taskToComplete) {
+                    completeTaskDirectly(taskToComplete);
+                  }
+                }}
+                disabled={!allChecklistItemsCompleted() || !!updating}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {updating ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Completing...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Complete Task
+                  </>
+                )}
+              </button>
+            </div>
+
+            {!allChecklistItemsCompleted() && (
+              <p className="text-xs text-red-600 text-center mt-3">
+                ⚠️ All checklist items must be checked to complete this task
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Confirmation Modal for Approve/Reject */}
       {showConfirmModal && confirmAction && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -870,6 +1495,194 @@ export default function Dashboard() {
           </div>
           </div>
         )}
+      {/* Hold Options Modal */}
+      {showHoldModal && selectedObjectionForHold && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-slate-900">
+                {holdAction === 'reject' && 'Reject Objection'}
+                {holdAction === 'terminate' && 'Terminate Task'}
+                {holdAction === 'replace' && 'Terminate & Create New Task'}
+                {holdAction === 'hold' && 'Hold Task'}
+              </h3>
+              <button
+                onClick={() => setShowHoldModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+              <p className="text-sm text-slate-600 mb-2">
+                <strong>Task:</strong> {selectedObjectionForHold.taskDescription}
+              </p>
+              <p className="text-sm text-slate-600">
+                <strong>Objection Reason:</strong> {selectedObjectionForHold.reason}
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              {holdAction === 'replace' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      New Assignee (Optional)
+                    </label>
+                    <select
+                      value={holdData.newAssignee}
+                      onChange={(e) => setHoldData({ ...holdData, newAssignee: e.target.value })}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    >
+                      <option value="">Keep current assignee</option>
+                      {taskUsers.map(user => (
+                        <option key={user.userId} value={user.userId}>
+                          {user.name} ({user.department})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      New Due Date (Optional)
+                    </label>
+                    <input
+                      type="date"
+                      value={holdData.newDueDate}
+                      onChange={(e) => setHoldData({ ...holdData, newDueDate: e.target.value })}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Reason for Action
+                </label>
+                <textarea
+                  value={holdData.reason}
+                  onChange={(e) => setHoldData({ ...holdData, reason: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  placeholder={`Explain why you're ${holdAction === 'reject' ? 'rejecting' : holdAction === 'terminate' ? 'terminating' : holdAction === 'replace' ? 'replacing' : 'holding'} this task...`}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowHoldModal(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeHoldAction}
+                disabled={updating === selectedObjectionForHold.objectionId || !holdData.reason.trim()}
+                className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                  holdAction === 'reject' ? 'bg-slate-600 hover:bg-slate-700' :
+                  holdAction === 'terminate' ? 'bg-red-600 hover:bg-red-700' :
+                  holdAction === 'replace' ? 'bg-green-600 hover:bg-green-700' :
+                  'bg-yellow-600 hover:bg-yellow-700'
+                }`}
+              >
+                {updating === selectedObjectionForHold.objectionId ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    {holdAction === 'reject' && 'Reject Objection'}
+                    {holdAction === 'terminate' && 'Terminate Task'}
+                    {holdAction === 'replace' && 'Terminate & Create New'}
+                    {holdAction === 'hold' && 'Hold Task'}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Attachment Modal */}
+      {showAttachmentModal && selectedTaskForAttachments && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-slate-900">Task Attachments</h3>
+              <button
+                onClick={() => {
+                  setShowAttachmentModal(false);
+                  setSelectedTaskForAttachments(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-sm text-slate-600 mb-2">
+                <strong>Task:</strong> {selectedTaskForAttachments.title}
+              </p>
+              <p className="text-sm text-slate-600">
+                <strong>Type:</strong> FMS Project Task
+              </p>
+            </div>
+
+            <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
+              <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                <Paperclip className="w-4 h-4" />
+                Attachments ({selectedTaskAttachments.length}):
+              </h4>
+              {selectedTaskAttachments.map((att: any, idx: number) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Paperclip className="w-4 h-4 text-blue-600" />
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">{att.name}</p>
+                      {att.size && (
+                        <p className="text-xs text-slate-500">
+                          Size: {Math.round(att.size / 1024)} KB
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <a
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    View
+                  </a>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowAttachmentModal(false);
+                  setSelectedTaskForAttachments(null);
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

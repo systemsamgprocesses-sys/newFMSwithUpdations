@@ -12,13 +12,33 @@ const API_URL = import.meta.env.DEV
   ? `/api/macros/s/${APPS_SCRIPT_URL.split('/macros/s/')[1]?.split('/')[0]}/exec`
   : APPS_SCRIPT_URL;
 
+// Smart TTL based on action type
+const getCacheTTL = (action: string): number => {
+  // Static data: cache for 10 minutes
+  if (['getUsers', 'getAllFMS', 'getFMSById'].includes(action)) {
+    return 600000; // 10 minutes
+  }
+  // Dynamic data: cache for 2 minutes
+  if (['getAllProjects', 'getProjectsByUser', 'getTasks', 'getTaskSummary'].includes(action)) {
+    return 120000; // 2 minutes
+  }
+  // Fast-changing data: cache for 30 seconds
+  if (['getAllLogs', 'getFMSRevisions'].includes(action)) {
+    return 30000; // 30 seconds
+  }
+  // Default: 5 minutes
+  return 300000;
+};
+
 async function callAppsScript(action: string, payload: Record<string, any> = {}, retries = 3, useCache = false) {
   // Check cache for read operations
   const cacheKey = `${action}:${JSON.stringify(payload)}`;
   if (useCache) {
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
-      console.log('Cache hit:', action);
+      if (import.meta.env.DEV) {
+        console.log('✓ Cache hit:', action);
+      }
       return cachedData;
     }
   }
@@ -50,9 +70,13 @@ async function callAppsScript(action: string, payload: Record<string, any> = {},
         throw new Error(msg);
       }
 
-      // Cache successful read operations
+      // Cache successful read operations with smart TTL
       if (useCache && json?.success) {
-        cache.set(cacheKey, json, 60000); // 1 minute TTL
+        const ttl = getCacheTTL(action);
+        cache.set(cacheKey, json, ttl);
+        if (import.meta.env.DEV) {
+          console.log(`✓ Cached ${action} for ${ttl/1000}s`);
+        }
       }
 
       return json;
@@ -74,6 +98,11 @@ export const api = {
   async login(username: string, password: string) {
     // avoid logging sensitive data in production
     return callAppsScript('login', { username, password });
+  },
+
+  // Change password
+  async changePassword(data: { username: string; currentPassword: string; newPassword: string }) {
+    return callAppsScript('changePassword', data);
   },
 
   // Users (frontend expects getAllUsers / createUser(...) signatures)
@@ -163,6 +192,24 @@ export const api = {
     return callAppsScript('updateTaskStatus', { rowIndex, status, username });
   },
 
+  // Submit progress with attachments (uploads files to Drive)
+  async submitProgressWithAttachments(params: {
+    projectId: string;
+    fmsId: string;
+    stepNo: number;
+    status: string;
+    username: string;
+    attachments?: any[];
+    checklistItems?: any[];
+  }) {
+    cache.invalidatePattern('getAllProjects');
+    cache.invalidatePattern('getProjectsByUser');
+    cache.invalidatePattern('getAllLogs');
+    cache.invalidatePattern('getTasks');
+    cache.invalidatePattern('getTaskSummary');
+    return callAppsScript('submitProgressWithAttachments', params);
+  },
+
   async getAllLogs() {
     return callAppsScript('getAllLogs', {}, 3, true); // Use cache
   },
@@ -229,6 +276,29 @@ export const api = {
     return callAppsScript('requestFMSRevision', revisionData);
   },
 
+  // ===== OBJECTION SYSTEM =====
+  
+  // Raise objection for any task
+  async raiseObjection(objectionData: Record<string, any>) {
+    cache.invalidatePattern('getObjections');
+    cache.invalidatePattern('getAllLogs');
+    return callAppsScript('raiseObjection', objectionData);
+  },
+
+  // Get objections for review (by assigned reviewer)
+  async getObjections(userId: string) {
+    return callAppsScript('getObjections', { userId }, 3, true);
+  },
+
+  // Review objection (approve terminate, approve replace, or reject)
+  async reviewObjection(data: Record<string, any>) {
+    cache.invalidatePattern('getObjections');
+    cache.invalidatePattern('getAllProjects');
+    cache.invalidatePattern('getTasks');
+    cache.invalidatePattern('getAllLogs');
+    return callAppsScript('reviewObjection', data);
+  },
+
   // Get FMS revision requests for a user (creator)
   async getFMSRevisions(userId: string) {
     return callAppsScript('getFMSRevisions', { userId }, 3, true); // Use cache
@@ -248,6 +318,38 @@ export const api = {
     cache.invalidatePattern('getFMSRevisions');
     cache.invalidatePattern('getAllLogs');
     return callAppsScript('rejectFMSRevision', data);
+  },
+
+  // ===== GOOGLE DRIVE UPLOAD =====
+  
+  // Upload single file to Drive
+  async uploadFile(fileData: { data: string; name: string; mimeType: string; context?: string }, username: string) {
+    return callAppsScript('uploadFile', {
+      fileData: fileData.data,
+      fileName: fileData.name,
+      mimeType: fileData.mimeType,
+      uploadedBy: username,
+      context: fileData.context
+    });
+  },
+
+  // Upload multiple files to Drive
+  async uploadMultipleFiles(files: Array<{ data: string; name: string; mimeType: string }>, context?: string, username?: string) {
+    return callAppsScript('uploadMultipleFiles', {
+      files,
+      context,
+      uploadedBy: username || 'unknown'
+    });
+  },
+
+  // Delete file from Drive
+  async deleteFile(fileId: string) {
+    return callAppsScript('deleteFile', { fileId });
+  },
+
+  // Get file metadata
+  async getFileMetadata(fileId: string) {
+    return callAppsScript('getFileMetadata', { fileId }, 3, true);
   },
 };
 
