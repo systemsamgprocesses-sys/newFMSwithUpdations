@@ -7,6 +7,22 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: false,
+    minify: 'terser',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          router: ['react-router-dom'],
+          ui: ['@mui/material', '@emotion/react', '@emotion/styled'],
+          utils: ['axios', 'lucide-react']
+        }
+      }
+    }
+  },
   server: {
     cors: {
       origin: '*',

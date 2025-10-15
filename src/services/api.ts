@@ -1,16 +1,10 @@
 import { FMSStep } from '../types';
 import { cache } from './cache';
 
-const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL as string;
-
-if (!APPS_SCRIPT_URL) {
-  throw new Error('VITE_APPS_SCRIPT_URL is not defined. Restart dev server after updating .env');
-}
-
-// Use proxy in development, direct URL in production
+// Use local proxy server to avoid CORS issues
 const API_URL = import.meta.env.DEV 
-  ? `/api/macros/s/${APPS_SCRIPT_URL.split('/macros/s/')[1]?.split('/')[0]}/exec`
-  : APPS_SCRIPT_URL;
+  ? 'http://localhost:3000/api/fms'
+  : 'https://your-production-proxy.com/api/fms'; // TODO: Replace with your actual production proxy URL
 
 // Smart TTL based on action type
 const getCacheTTL = (action: string): number => {

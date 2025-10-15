@@ -305,14 +305,21 @@ function ensureSheetsExist() {
 
 // ===== MAIN HANDLERS =====
 
+/**
+ * Create a response with CORS headers
+ */
+function createCORSResponse(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 function doGet(e) {
   // Ensure sheets exist on first load
   ensureSheetsExist();
-  
-  return ContentService.createTextOutput(JSON.stringify({
-    status: 'success',
-    message: 'FMS + Task Management API is running - Enhanced Version'
-  })).setMimeType(ContentService.MimeType.JSON);
+
+  const payload = { success: true, message: 'FMS backend is running' };
+  return createCORSResponse(payload);
 }
 
 function doPost(e) {
@@ -444,16 +451,13 @@ function doPost(e) {
         result = { success: false, message: 'Invalid action: ' + action };
     }
     
-    return ContentService.createTextOutput(JSON.stringify(result))
-      .setMimeType(ContentService.MimeType.JSON);
+    return createCORSResponse(result);
       
   } catch(error) {
     Logger.log('Error in doPost: ' + error.toString());
-    return ContentService.createTextOutput(JSON.stringify({
-      success: false,
-      message: 'Server error: ' + error.toString()
-    })).setMimeType(ContentService.MimeType.JSON);
+    return createCORSResponse({ success: false, message: error.toString() });
   }
+  
 }
 
 // ===== DATE HELPER FUNCTIONS =====
@@ -3280,4 +3284,3 @@ function logFileUpload(uploadData) {
     Logger.log('logFileUpload error: ' + error.toString());
   }
 }
-
