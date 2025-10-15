@@ -60,14 +60,14 @@ export default function Login() {
           <div className="flex flex-col items-center mb-4 sm:mb-6">
             <img 
               src="/assets/AMG LOGO.webp" 
-              alt="Company Logo" 
-              className="w-20 h-20 sm:w-24 sm:h-24 object-contain mb-4"
+              alt="AMG Logo" 
+              className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 object-contain mb-4"
               onError={(e) => {
                 // Fallback to icon if image fails
                 e.currentTarget.style.display = 'none';
                 const fallback = document.createElement('div');
-                fallback.className = 'bg-gradient-to-br from-purple-600 to-blue-600 p-4 rounded-xl mb-4';
-                fallback.innerHTML = '<svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+                fallback.className = 'bg-gradient-to-br from-purple-600 to-blue-600 p-3 sm:p-4 rounded-xl mb-4';
+                fallback.innerHTML = '<svg class="w-10 h-10 sm:w-12 sm:h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
                 e.currentTarget.parentElement?.insertBefore(fallback, e.currentTarget);
               }}
             />

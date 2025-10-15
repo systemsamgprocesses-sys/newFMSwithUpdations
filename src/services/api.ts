@@ -2,9 +2,7 @@ import { FMSStep } from '../types';
 import { cache } from './cache';
 
 // Use local proxy server to avoid CORS issues
-const API_URL = import.meta.env.DEV 
-  ? 'http://localhost:3000/api/fms'
-  : 'https://your-production-proxy.com/api/fms'; // TODO: Replace with your actual production proxy URL
+const API_URL = 'https://api-for-fms.onrender.com/api/fms';
 
 // Smart TTL based on action type
 const getCacheTTL = (action: string): number => {

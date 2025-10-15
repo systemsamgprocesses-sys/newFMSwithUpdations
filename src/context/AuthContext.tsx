@@ -14,14 +14,36 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
     const savedUser = localStorage.getItem('fms_user');
-    return savedUser ? JSON.parse(savedUser) : null;
+    const savedExpiry = localStorage.getItem('fms_user_expiry');
+    
+    if (savedUser && savedExpiry) {
+      const expiryDate = new Date(savedExpiry);
+      const now = new Date();
+      
+      // Check if session is still valid (30 days)
+      if (now < expiryDate) {
+        return JSON.parse(savedUser);
+      } else {
+        // Session expired, clear storage
+        localStorage.removeItem('fms_user');
+        localStorage.removeItem('fms_user_expiry');
+      }
+    }
+    
+    return null;
   });
 
   useEffect(() => {
     if (user) {
+      // Set expiry to 30 days from now
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + 30);
+      
       localStorage.setItem('fms_user', JSON.stringify(user));
+      localStorage.setItem('fms_user_expiry', expiryDate.toISOString());
     } else {
       localStorage.removeItem('fms_user');
+      localStorage.removeItem('fms_user_expiry');
     }
   }, [user]);
 
@@ -57,6 +79,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setUser(null);
   };
+
+  // Session refresh mechanism - extend session on user activity
+  useEffect(() => {
+    if (!user) return;
+
+    const refreshSession = () => {
+      const savedUser = localStorage.getItem('fms_user');
+      if (savedUser) {
+        // Refresh the expiry date to 30 days from now
+        const expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + 30);
+        localStorage.setItem('fms_user_expiry', expiryDate.toISOString());
+      }
+    };
+
+    // Refresh session on user activity (mousemove, click, keypress)
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach(event => {
+      document.addEventListener(event, refreshSession, true);
+    });
+
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, refreshSession, true);
+      });
+    };
+  }, [user]);
 
   return (
     <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>

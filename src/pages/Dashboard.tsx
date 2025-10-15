@@ -1066,7 +1066,7 @@ export default function Dashboard() {
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
             {[
               { onClick: () => navigate('/start-project'), icon: Target, label: 'Start FMS Project', color: 'from-purple-600 to-purple-700' },
-              { onClick: () => navigate('/tasks'), icon: CheckSquare, label: 'Assign Task', color: 'from-cyan-600 to-cyan-700' },
+              { onClick: () => navigate('/tasks?tab=assign'), icon: CheckSquare, label: 'Assign Task', color: 'from-cyan-600 to-cyan-700' },
               {
                 onClick: () => {
                   loadMyTasks(user!.username);

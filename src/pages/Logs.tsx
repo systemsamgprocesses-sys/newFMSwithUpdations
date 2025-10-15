@@ -1,25 +1,48 @@
 import { useState, useEffect } from 'react';
 import { FileText, GitBranch, PlayCircle, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { Log } from '../types';
 import { SkeletonList } from '../components/SkeletonLoader';
 
 export default function Logs() {
+  const { user } = useAuth();
   const [logs, setLogs] = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    loadLogs();
-  }, []);
+    if (user?.username) {
+      loadLogs();
+    }
+  }, [user?.username]);
 
   const loadLogs = async () => {
+    if (!user?.username) return;
+    
     setLoading(true);
     try {
       const result = await api.getAllLogs();
       if (result.success) {
-        setLogs(result.logs);
+        // Filter logs based on user role and permissions
+        let filteredLogs = result.logs || [];
+        
+        // Super Admin and Admin see all logs
+        if (user.role?.toLowerCase() === 'superadmin' || user.role?.toLowerCase() === 'super admin' || user.role?.toLowerCase() === 'admin') {
+          // Keep all logs for admins
+        } else {
+          // Regular users see only logs related to their activities
+          filteredLogs = filteredLogs.filter((log: Log) => {
+            // Show logs where user is mentioned or involved
+            return log.userId === user.username || 
+                   log.username === user.username ||
+                   log.message?.toLowerCase().includes(user.username.toLowerCase()) ||
+                   log.message?.toLowerCase().includes(user.name?.toLowerCase() || '');
+          });
+        }
+        
+        setLogs(filteredLogs);
       } else {
         setError('Failed to load logs');
       }

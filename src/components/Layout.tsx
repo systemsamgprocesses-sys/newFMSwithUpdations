@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Workflow, LayoutDashboard, GitBranch, PlayCircle, FileText, List, Users, AlertTriangle, ListTodo, Lock, Settings, Target } from 'lucide-react';
+import { LogOut, LayoutDashboard, GitBranch, PlayCircle, FileText, List, Users, AlertTriangle, ListTodo, Lock, Target } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
@@ -28,15 +28,22 @@ export default function Layout({ children }: LayoutProps) {
   };
 
   const navItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/create-fms', label: 'Create FMS', icon: GitBranch },
-    { path: '/view-fms', label: 'View FMS', icon: List },
-    { path: '/fms-progress', label: 'FMS Progress', icon: Target },
-    { path: '/start-project', label: 'Start Project', icon: PlayCircle },
-    { path: '/tasks', label: 'Task Management', icon: ListTodo },
-    { path: '/logs', label: 'Logs', icon: FileText },
-    { path: '/users', label: 'Users', icon: Users },
+    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['all'] },
+    { path: '/create-fms', label: 'Create FMS', icon: GitBranch, roles: ['admin', 'superadmin', 'super admin'] },
+    { path: '/view-fms', label: 'View FMS', icon: List, roles: ['all'] },
+    { path: '/fms-progress', label: 'FMS Progress', icon: Target, roles: ['all'] },
+    { path: '/start-project', label: 'Start Project', icon: PlayCircle, roles: ['admin', 'superadmin', 'super admin'] },
+    { path: '/tasks', label: 'Task Management', icon: ListTodo, roles: ['all'] },
+    { path: '/logs', label: 'Logs', icon: FileText, roles: ['all'] },
+    { path: '/users', label: 'Users', icon: Users, roles: ['admin', 'superadmin', 'super admin'] },
   ];
+
+  // Filter navigation items based on user role
+  const filteredNavItems = navItems.filter(item => {
+    if (!user) return false;
+    const userRole = user.role?.toLowerCase() || 'user';
+    return item.roles.includes('all') || item.roles.includes(userRole);
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
@@ -55,30 +62,27 @@ export default function Layout({ children }: LayoutProps) {
               transition={{ delay: 0.1 }}
               className="flex items-center justify-between lg:justify-start lg:gap-4 flex-shrink-0"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <motion.img
                   whileHover={{ scale: 1.1, rotate: 5 }}
                   transition={{ type: 'spring', stiffness: 300 }}
                   src="/assets/AMG LOGO.webp" 
-                  alt="Company Logo" 
-                  className="w-10 h-10 sm:w-12 sm:h-12 object-contain rounded-lg shadow-lg"
+                  alt="AMG Logo" 
+                  className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 object-contain rounded-lg shadow-lg"
                   onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
                     // Fallback to icon if image fails to load
                     e.currentTarget.style.display = 'none';
                     const fallback = document.createElement('div');
-                    fallback.className = 'w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center';
-                    fallback.innerHTML = '<svg class="w-6 h-6 sm:w-8 sm:h-8 text-slate-900"><use href="#workflow-icon"></use></svg>';
+                    fallback.className = 'w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 flex items-center justify-center bg-gradient-to-br from-purple-600 to-blue-600 rounded-lg shadow-lg';
+                    fallback.innerHTML = '<svg class="w-4 h-4 sm:w-6 sm:h-6 md:w-7 md:h-7 lg:w-8 lg:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
                     e.currentTarget.parentElement?.insertBefore(fallback, e.currentTarget);
                   }}
                 />
-                <div className="hidden" id="workflow-icon">
-                  <Workflow className="w-6 h-6 sm:w-8 sm:h-8 text-slate-900" />
-                </div>
                 <div>
-                  <h1 className="text-lg sm:text-xl font-bold text-gradient whitespace-nowrap">
+                  <h1 className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-gradient whitespace-nowrap">
                     Task Management System
                   </h1>
-                  <p className="text-xs text-slate-600 hidden md:block">Streamline Your Workflows</p>
+                  <p className="text-xs sm:text-sm text-slate-600 hidden sm:block">Streamline Your Workflows</p>
                 </div>
               </div>
             </motion.div>
@@ -91,7 +95,7 @@ export default function Layout({ children }: LayoutProps) {
               className="overflow-x-auto scrollbar-premium -mx-3 px-3 lg:mx-0 lg:px-0 lg:flex-1"
             >
               <div className="flex gap-1 lg:gap-2 min-w-max lg:min-w-0 lg:justify-center">
-                {navItems.map((item, index) => {
+                {filteredNavItems.map((item, index) => {
                   const Icon = item.icon;
                   const isActive = location.pathname === item.path;
                   return (

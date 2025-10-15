@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   ListTodo, 
   Plus, 
@@ -24,6 +25,7 @@ type TabType = 'overview' | 'upcoming' | 'pending' | 'all' | 'revisions' | 'assi
 
 export default function TaskManagement() {
   const { user } = useAuth();
+  const location = useLocation();
   
   // State
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -80,6 +82,15 @@ export default function TaskManagement() {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
+
+  // Handle URL parameters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const tabParam = urlParams.get('tab');
+    if (tabParam && ['overview', 'upcoming', 'pending', 'all', 'revisions', 'assign', 'scoring'].includes(tabParam)) {
+      setActiveTab(tabParam as TabType);
+    }
+  }, [location.search]);
 
   // Load data on mount
   useEffect(() => {
