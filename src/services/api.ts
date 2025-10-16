@@ -330,13 +330,49 @@ export const api = {
     });
   },
 
-  // Upload multiple files to Drive
+  // Upload multiple files to Drive (with chunking to avoid 413 errors)
   async uploadMultipleFiles(files: Array<{ data: string; name: string; mimeType: string }>, context?: string, username?: string) {
-    return callAppsScript('uploadMultipleFiles', {
-      files,
-      context,
-      uploadedBy: username || 'unknown'
-    });
+    // For large payloads, upload files one by one to avoid 413 errors
+    if (files.length > 1 || files.some(f => f.data.length > 5000000)) { // 5MB per file threshold
+      const results = [];
+      const errors = [];
+      
+      for (let i = 0; i < files.length; i++) {
+        try {
+          const result = await callAppsScript('uploadFile', {
+            fileData: files[i].data,
+            fileName: files[i].name,
+            mimeType: files[i].mimeType,
+            uploadedBy: username || 'unknown',
+            context: context || 'General'
+          });
+          
+          if (result.success && result.file) {
+            results.push(result.file);
+          } else {
+            errors.push(`Failed to upload ${files[i].name}: ${result.message || 'Unknown error'}`);
+          }
+        } catch (error: any) {
+          errors.push(`Failed to upload ${files[i].name}: ${error.message || 'Upload error'}`);
+        }
+      }
+      
+      return {
+        success: results.length > 0,
+        files: results,
+        errors: errors,
+        message: results.length === files.length 
+          ? `All ${files.length} files uploaded successfully`
+          : `${results.length}/${files.length} files uploaded successfully`
+      };
+    } else {
+      // For small payloads, use the original batch upload
+      return callAppsScript('uploadMultipleFiles', {
+        files,
+        context,
+        uploadedBy: username || 'unknown'
+      });
+    }
   },
 
   // Delete file from Drive

@@ -2,9 +2,16 @@
   publish = "dist"
   command = "npm run build"
 
+# API redirects
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/server/:splat"
+  status = 200
+
+# Handle client-side routing - redirect all non-API requests to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
   status = 200
 
 [dev]

@@ -23,6 +23,7 @@ export default defineConfig({
       }
     }
   },
+  publicDir: 'public',
   server: {
     cors: {
       origin: '*',

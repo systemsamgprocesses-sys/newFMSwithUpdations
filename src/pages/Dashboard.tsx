@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckSquare, Loader, Calendar, ListChecks, AlertCircle, TrendingUp, Target, X, Edit, Paperclip, ExternalLink, CheckCircle } from 'lucide-react';
+import { CheckSquare, Loader, Calendar, ListChecks, AlertCircle, TrendingUp, Target, X, Edit, Paperclip, ExternalLink, CheckCircle, Plus, Send, BarChart3 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useAlert } from '../context/AlertContext';
 import { api } from '../services/api';
-import { ProjectTask, TaskData } from '../types';
+import { ProjectTask, TaskData, TaskUser, ScoringData } from '../types';
 import { SkeletonDashboard } from '../components/SkeletonLoader';
+import DriveFileUpload from '../components/DriveFileUpload';
 
 interface UnifiedTask {
   id: string;
@@ -54,7 +55,6 @@ export default function Dashboard() {
   // Task Management state
   const [tmTasks, setTmTasks] = useState<TaskData[]>([]);
   const [tmLoading, setTmLoading] = useState(false);
-  const [taskUsers, setTaskUsers] = useState<any[]>([]);
 
   // FMS Revisions state
   const [fmsRevisions, setFmsRevisions] = useState<any[]>([]);
@@ -65,7 +65,7 @@ export default function Dashboard() {
   const [objectionsLoading, setObjectionsLoading] = useState(false);
 
   // Unified state
-  const [activeTab, setActiveTab] = useState<'all' | 'fms' | 'tm' | 'due' | 'revisions' | 'objections'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'fms' | 'tm' | 'due' | 'revisions' | 'objections' | 'assign' | 'performance'>('all');
 
   // Modal state
   const [showRevisionModal, setShowRevisionModal] = useState(false);
@@ -109,12 +109,38 @@ export default function Dashboard() {
   
   const [success, setSuccess] = useState('');
 
+  // Task Management Integration State
+  const [taskUsers, setTaskUsers] = useState<TaskUser[]>([]);
+  const [assignForm, setAssignForm] = useState({
+    assignedTo: '',
+    description: '',
+    plannedDate: '',
+    tutorialLinks: '',
+    department: '',
+    attachments: [] as any[]
+  });
+  const [hasPendingUploads, setHasPendingUploads] = useState(false);
+  
+  // Performance/Scoring state
+  const [selectedScoringUser, setSelectedScoringUser] = useState(user?.username || '');
+  const [availableUsers, setAvailableUsers] = useState<TaskUser[]>([]);
+  const [scoringData, setScoringData] = useState<ScoringData | null>(null);
+  const [scoringDates, setScoringDates] = useState({
+    startDate: '',
+    endDate: ''
+  });
+  const [loadingScoring, setLoadingScoring] = useState(false);
+
   useEffect(() => {
     if (user?.username) {
       loadMyTasks(user.username);
       loadTaskManagementData();
       loadFMSRevisions();
       loadObjections();
+      loadTaskUsers();
+      loadAvailableUsersForScoring();
+      setDefaultScoringDates();
+      setSelectedScoringUser(user.username);
     }
   }, [user?.username]);
 
@@ -172,55 +198,200 @@ export default function Dashboard() {
     }
   };
 
+  const loadTaskUsers = async () => {
+    try {
+      const result = await api.getTaskUsers();
+      if (result.success) {
+        setTaskUsers(result.users || []);
+      }
+    } catch (err: any) {
+      console.error('Error loading users:', err);
+    }
+  };
+
+  const loadAvailableUsersForScoring = async () => {
+    try {
+      const result = await api.getTaskUsers();
+      if (result.success) {
+        setAvailableUsers(result.users || []);
+      }
+    } catch (err) {
+      console.error('Error loading users for scoring:', err);
+    }
+  };
+
+  const setDefaultScoringDates = () => {
+    const today = new Date();
+    const currentDay = today.getDay();
+    
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - currentDay + (currentDay === 0 ? -6 : 1));
+    
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    
+    const mondayISO = monday.toISOString().split('T')[0];
+    const sundayISO = sunday.toISOString().split('T')[0];
+    
+    setScoringDates({
+      startDate: mondayISO,
+      endDate: sundayISO
+    });
+  };
+
+  const handleAssignTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (hasPendingUploads) {
+      setError('⚠️ Files are selected but not uploaded! Click "Upload to Drive Now!" button first.');
+      return;
+    }
+    
+    setTmLoading(true);
+    setError('');
+    setSuccess('');
+    
+    try {
+      const result = await api.assignTask({
+        givenBy: user!.username,
+        assignedTo: assignForm.assignedTo,
+        description: assignForm.description,
+        plannedDate: assignForm.plannedDate,
+        tutorialLinks: assignForm.tutorialLinks,
+        department: assignForm.department,
+        attachments: assignForm.attachments
+      });
+      
+      if (result.success) {
+        setSuccess(`Task ${result.taskId} assigned successfully!`);
+        setAssignForm({
+          assignedTo: '',
+          description: '',
+          plannedDate: '',
+          tutorialLinks: '',
+          department: '',
+          attachments: []
+        });
+        // Refresh task data
+        await loadTaskManagementData();
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setError(result.message || 'Failed to assign task');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to assign task');
+    } finally {
+      setTmLoading(false);
+    }
+  };
+
+  const loadScoringData = async () => {
+    if (!scoringDates.startDate || !scoringDates.endDate) {
+      setError('Please select both start and end dates');
+      return;
+    }
+    
+    setLoadingScoring(true);
+    setError('');
+    
+    try {
+      const result = await api.getScoringData(
+        selectedScoringUser,
+        scoringDates.startDate,
+        scoringDates.endDate
+      );
+      
+      if (result.success) {
+        setScoringData(result.data);
+      } else {
+        setError(result.message || 'Failed to load scoring data');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load scoring data');
+    } finally {
+      setLoadingScoring(false);
+    }
+  };
+
+  const getScoringUsers = () => {
+    if (!user) return [];
+    
+    const userRole = user.role?.toLowerCase();
+    
+    if (userRole === 'superadmin' || userRole === 'super admin') {
+      return availableUsers;
+    }
+    
+    if (userRole === 'admin') {
+      return availableUsers.filter(u => u.department === user.department);
+    }
+    
+    return availableUsers.filter(u => u.userId === user.username);
+  };
+
   const getUnifiedTasks = (): UnifiedTask[] => {
     const unified: UnifiedTask[] = [];
 
-    fmsTasks.forEach(task => {
-      const dueDate = new Date(task.plannedDueDate);
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-      dueDate.setHours(0, 0, 0, 0);
+    // Only process if fmsTasks is not empty
+    if (fmsTasks && fmsTasks.length > 0) {
+      fmsTasks.forEach(task => {
+        try {
+          const dueDate = new Date(task.plannedDueDate);
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          dueDate.setHours(0, 0, 0, 0);
 
-      // Get the "createdBy" from project data
-      const project = allProjects.find(p => p.projectId === task.projectId);
-      const createdBy = project?.tasks?.[0]?.who || 'Unknown'; // First task's creator
+          // Get the "createdBy" from project data
+          const project = allProjects.find(p => p.projectId === task.projectId);
+          const createdBy = project?.tasks?.[0]?.who || 'Unknown'; // First task's creator
 
-      unified.push({
-        id: `fms-${task.rowIndex || Math.random()}`,
-        type: 'FMS',
-        title: task.what,
-        description: task.how || '',
-        dueDate: task.plannedDueDate,
-        status: task.status,
-        assignee: task.who,
-        projectName: task.projectName,
-        isOverdue: task.status !== 'Done' && dueDate < now,
-        source: task,
-        createdBy: createdBy
+          unified.push({
+            id: `fms-${task.rowIndex || Math.random()}`,
+            type: 'FMS',
+            title: task.what,
+            description: task.how || '',
+            dueDate: task.plannedDueDate,
+            status: task.status,
+            assignee: task.who,
+            projectName: task.projectName,
+            isOverdue: task.status !== 'Done' && dueDate < now,
+            source: task,
+            createdBy: createdBy
+          });
+        } catch (error) {
+          console.error('Error processing FMS task:', error, task);
+        }
       });
-    });
+    }
 
-    tmTasks.forEach(task => {
-      const dueDate = new Date(task['PLANNED DATE']);
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-      dueDate.setHours(0, 0, 0, 0);
-      const status = task['Task Status'].toLowerCase();
+    // Only process if tmTasks is not empty
+    if (tmTasks && tmTasks.length > 0) {
+      tmTasks.forEach(task => {
+        try {
+          const dueDate = new Date(task['PLANNED DATE']);
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          dueDate.setHours(0, 0, 0, 0);
+          const status = task['Task Status']?.toLowerCase() || '';
 
-      unified.push({
-        id: `tm-${task['Task Id']}`,
-        type: 'TASK_MANAGEMENT',
-        title: task['TASK DESCRIPTION'],
-        description: task['HOW TO DO- TUTORIAL LINKS (OPTIONAL)'] || '',
-        dueDate: task['PLANNED DATE'],
-        status: task['Task Status'],
-        assignee: task['GIVEN TO USER ID'],
-        department: task['DEPARTMENT'],
-        isOverdue: status !== 'completed' && dueDate < now,
-        source: task,
-        createdBy: task['GIVEN BY']
+          unified.push({
+            id: `tm-${task['Task Id']}`,
+            type: 'TASK_MANAGEMENT',
+            title: task['TASK DESCRIPTION'],
+            description: task['HOW TO DO- TUTORIAL LINKS (OPTIONAL)'] || '',
+            dueDate: task['PLANNED DATE'],
+            status: task['Task Status'],
+            assignee: task['GIVEN TO USER ID'],
+            department: task['DEPARTMENT'],
+            isOverdue: status !== 'completed' && dueDate < now,
+            source: task,
+            createdBy: task['GIVEN BY']
+          });
+        } catch (error) {
+          console.error('Error processing TM task:', error, task);
+        }
       });
-    });
+    }
 
     return unified.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   };
@@ -257,25 +428,52 @@ export default function Dashboard() {
   now.setHours(0, 0, 0, 0);
   
   const tasksAssignedTillToday = allUnifiedTasks.filter(t => {
-    const dueDate = new Date(t.dueDate);
-    dueDate.setHours(0, 0, 0, 0);
-    return dueDate <= now; // Only tasks with due date today or in the past
+    try {
+      const dueDate = new Date(t.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+      return dueDate <= now; // Only tasks with due date today or in the past
+    } catch (error) {
+      console.error('Error filtering task by date:', error, t);
+      return false;
+    }
   });
 
-  const totalTasks = tasksAssignedTillToday.length;
+  const totalTasks = Math.max(0, tasksAssignedTillToday.length); // Ensure non-negative
   const fmsTaskCount = tasksAssignedTillToday.filter(t => t.type === 'FMS').length;
   const tmTaskCount = tasksAssignedTillToday.filter(t => t.type === 'TASK_MANAGEMENT').length;
-  const completedTasks = tasksAssignedTillToday.filter(t => 
-    t.status === 'Done' || t.status.toLowerCase() === 'completed'
-  ).length;
+  const completedTasks = tasksAssignedTillToday.filter(t => {
+    try {
+      return t.status === 'Done' || t.status?.toLowerCase() === 'completed';
+    } catch (error) {
+      console.error('Error checking task status:', error, t);
+      return false;
+    }
+  }).length;
   const dueTasks = tasksAssignedTillToday.filter(t => {
-    const dueDate = new Date(t.dueDate);
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    dueDate.setHours(0, 0, 0, 0);
-    return dueDate <= now && t.status !== 'Done' && t.status.toLowerCase() !== 'completed';
+    try {
+      const dueDate = new Date(t.dueDate);
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      dueDate.setHours(0, 0, 0, 0);
+      const isNotCompleted = t.status !== 'Done' && t.status?.toLowerCase() !== 'completed';
+      return dueDate <= now && isNotCompleted;
+    } catch (error) {
+      console.error('Error checking due task:', error, t);
+      return false;
+    }
   }).length;
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  // Debug logging
+  console.log('🔍 Task Count Debug:', {
+    allUnifiedTasks: allUnifiedTasks.length,
+    tasksAssignedTillToday: tasksAssignedTillToday.length,
+    totalTasks,
+    completedTasks,
+    completionRate,
+    fmsTasks: fmsTasks.length,
+    tmTasks: tmTasks.length
+  });
 
   const handleCompleteTask = async (task: UnifiedTask) => {
     // Check if task requires checklist
@@ -316,8 +514,8 @@ export default function Dashboard() {
         const result = await api.updateTaskStatus(fmsTask.rowIndex, 'Done', user!.username);
         if (result.success) {
           showSuccess('Task completed successfully!');
+          // Reload FMS tasks to get updated data
           await loadMyTasks(user!.username);
-          await loadTaskManagementData();
           setShowChecklistModal(false);
           setTaskToComplete(null);
         } else {
@@ -329,7 +527,10 @@ export default function Dashboard() {
         
         if (result.success) {
           showSuccess('Task completed successfully!');
-          await loadTaskManagementData();
+          // Update local state instead of reloading
+          setTmTasks(prev => prev.map(t => 
+            t['Task Id'] === tmTask['Task Id'] ? { ...t, 'Task Status': 'Completed' } : t
+          ));
         } else {
           showError(result.message || 'Failed to update task');
         }
@@ -682,7 +883,7 @@ export default function Dashboard() {
             className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4"
           >
             {[
-              { label: 'Total Tasks', value: totalTasks, subtitle: 'Till today', color: 'slate', delay: 0.1 },
+              { label: 'Total Tasks', value: Math.max(0, totalTasks), subtitle: 'Till today', color: 'slate', delay: 0.1 },
               { label: 'FMS Tasks', value: fmsTaskCount, subtitle: 'Till today', color: 'purple', delay: 0.15 },
               { label: 'Assigned Tasks', value: tmTaskCount, subtitle: 'Till today', color: 'cyan', delay: 0.2 },
               { label: 'Completed', value: completedTasks, subtitle: '', color: 'green', delay: 0.25 },
@@ -710,12 +911,14 @@ export default function Dashboard() {
           <div className="px-4 sm:px-6 py-3">
             <div className="flex gap-2 overflow-x-auto scrollbar-premium pb-2 sm:pb-0">
               {[
-                { id: 'all', icon: ListChecks, label: 'All', count: totalTasks },
+                { id: 'all', icon: ListChecks, label: 'All', count: Math.max(0, totalTasks) },
                 { id: 'due', icon: AlertCircle, label: 'Due Today', count: dueTasks },
                 { id: 'fms', icon: Target, label: 'FMS Projects', count: fmsTaskCount },
                 { id: 'tm', icon: CheckSquare, label: 'Assigned Tasks', count: tmTaskCount },
                 { id: 'revisions', icon: Edit, label: 'Revisions', count: fmsRevisions.length },
                 { id: 'objections', icon: AlertCircle, label: 'Objections', count: objections.length },
+                { id: 'assign', icon: Plus, label: 'Assign Task', count: null },
+                { id: 'performance', icon: BarChart3, label: 'Performance', count: null },
               ].map((tab, index) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -909,6 +1112,243 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+          ) : activeTab === 'assign' ? (
+            // Assign Task Section
+            <div className="max-w-2xl mx-auto">
+              <form onSubmit={handleAssignTask} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Assign To
+                  </label>
+                  <select
+                    value={assignForm.assignedTo}
+                    onChange={(e) => setAssignForm({ ...assignForm, assignedTo: e.target.value })}
+                    required
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  >
+                    <option value="">Select User</option>
+                    {taskUsers.map(user => (
+                      <option key={user.userId} value={user.userId}>
+                        {user.name} ({user.department})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Task Description
+                  </label>
+                  <textarea
+                    value={assignForm.description}
+                    onChange={(e) => setAssignForm({ ...assignForm, description: e.target.value })}
+                    required
+                    rows={4}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    placeholder="Describe the task..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Department
+                  </label>
+                  <input
+                    type="text"
+                    value={assignForm.department}
+                    onChange={(e) => setAssignForm({ ...assignForm, department: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    placeholder="Department (optional)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Planned Date
+                  </label>
+                  <input
+                    type="date"
+                    value={assignForm.plannedDate}
+                    onChange={(e) => setAssignForm({ ...assignForm, plannedDate: e.target.value })}
+                    required
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Tutorial Links (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    value={assignForm.tutorialLinks}
+                    onChange={(e) => setAssignForm({ ...assignForm, tutorialLinks: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    placeholder="https://..."
+                  />
+                </div>
+
+                {/* File Upload for Task */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    📎 Attachments (Optional)
+                  </label>
+                  <DriveFileUpload
+                    fmsName={`Task-${assignForm.description.substring(0, 20)}`}
+                    username={user!.username}
+                    onFilesUploaded={(files) => {
+                      setAssignForm({ ...assignForm, attachments: files });
+                    }}
+                    currentFiles={assignForm.attachments}
+                    maxFiles={3}
+                    maxSizeMB={5}
+                    onPendingFilesChange={setHasPendingUploads}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={tmLoading}
+                  className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {tmLoading ? (
+                    <>
+                      <Loader className="w-5 h-5 animate-spin" />
+                      Assigning...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-5 h-5" />
+                      Assign Task
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          ) : activeTab === 'performance' ? (
+            // Performance Section
+            <div className="space-y-6">
+              <div className="max-w-2xl mx-auto">
+                {/* User Selection for Scoring */}
+                {getScoringUsers().length > 1 && (
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Select User for Scoring
+                    </label>
+                    <select
+                      value={selectedScoringUser}
+                      onChange={(e) => setSelectedScoringUser(e.target.value)}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    >
+                      {getScoringUsers().map((user) => (
+                        <option key={user.userId} value={user.userId}>
+                          {user.name} ({user.userId}) - {user.department}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                
+                <div className="flex gap-4 mb-6">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={scoringDates.startDate}
+                      onChange={(e) => setScoringDates({ ...scoringDates, startDate: e.target.value })}
+                      max={new Date().toISOString().split('T')[0]}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    />
+                  </div>
+                  
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      value={scoringDates.endDate}
+                      onChange={(e) => setScoringDates({ ...scoringDates, endDate: e.target.value })}
+                      max={new Date().toISOString().split('T')[0]}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    />
+                  </div>
+                  
+                  <div className="flex items-end">
+                    <button
+                      onClick={loadScoringData}
+                      disabled={loadingScoring}
+                      className="px-6 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loadingScoring ? (
+                        <Loader className="w-5 h-5 animate-spin" />
+                      ) : (
+                        'Load'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {scoringData && (
+                <div className="max-w-4xl mx-auto bg-slate-50 rounded-xl p-6 space-y-4">
+                  <h3 className="text-xl font-bold text-slate-900 mb-4">
+                    Performance Report - {getScoringUsers().find(u => u.userId === selectedScoringUser)?.name || selectedScoringUser}
+                  </h3>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-lg p-4 border border-slate-200">
+                      <div className="text-sm text-slate-600 mb-1">Total Tasks</div>
+                      <div className="text-2xl font-bold text-slate-900">{Math.max(0, scoringData.totalTasks || 0)}</div>
+                    </div>
+                    
+                    <div className="bg-white rounded-lg p-4 border border-slate-200">
+                      <div className="text-sm text-slate-600 mb-1">Completed</div>
+                      <div className="text-2xl font-bold text-green-600">{scoringData.completedTasks}</div>
+                    </div>
+                    
+                    <div className="bg-white rounded-lg p-4 border border-slate-200">
+                      <div className="text-sm text-slate-600 mb-1">On Time</div>
+                      <div className="text-2xl font-bold text-blue-600">{scoringData.completedOnTime}</div>
+                    </div>
+                    
+                    <div className="bg-white rounded-lg p-4 border border-slate-200">
+                      <div className="text-sm text-slate-600 mb-1">Not On Time</div>
+                      <div className="text-2xl font-bold text-orange-600">{scoringData.completedNotOnTime}</div>
+                    </div>
+                    
+                    <div className="bg-white rounded-lg p-4 border border-slate-200">
+                      <div className="text-sm text-slate-600 mb-1">Due Not Completed</div>
+                      <div className="text-2xl font-bold text-red-600">{scoringData.dueNotCompleted}</div>
+                    </div>
+                    
+                    <div className="bg-white rounded-lg p-4 border border-slate-200">
+                      <div className="text-sm text-slate-600 mb-1">Revisions</div>
+                      <div className="text-2xl font-bold text-slate-900">{scoringData.revisionsTaken}</div>
+                    </div>
+                    
+                    <div className="bg-white rounded-lg p-4 border border-slate-200">
+                      <div className="text-sm text-slate-600 mb-1">Scores Impacted</div>
+                      <div className="text-2xl font-bold text-slate-900">{scoringData.scoresImpacted}</div>
+                    </div>
+                    
+                    <div className="bg-white rounded-lg p-4 border border-slate-200">
+                      <div className="text-sm text-slate-600 mb-1">Total Score Sum</div>
+                      <div className="text-2xl font-bold text-slate-900">{scoringData.totalScoreSum}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl p-6 text-white mt-6">
+                    <div className="text-center">
+                      <div className="text-sm uppercase tracking-wide mb-2">Final Performance Score</div>
+                      <div className="text-5xl font-bold">{scoringData.finalScore}%</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : filteredTasks.length === 0 ? (
             <div className="text-center py-12 text-slate-600">
               <CheckSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
@@ -1066,11 +1506,11 @@ export default function Dashboard() {
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
             {[
               { onClick: () => navigate('/start-project'), icon: Target, label: 'Start FMS Project', color: 'from-purple-600 to-purple-700' },
-              { onClick: () => navigate('/tasks?tab=assign'), icon: CheckSquare, label: 'Assign Task', color: 'from-cyan-600 to-cyan-700' },
+              { onClick: () => setActiveTab('assign'), icon: Plus, label: 'Assign Task', color: 'from-cyan-600 to-cyan-700' },
+              { onClick: () => setActiveTab('performance'), icon: BarChart3, label: 'Performance', color: 'from-green-600 to-green-700' },
               {
                 onClick: () => {
-                  loadMyTasks(user!.username);
-                  loadTaskManagementData();
+                  // Only refresh essential data, not everything
                   loadFMSRevisions();
                   loadObjections();
                 },

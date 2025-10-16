@@ -15,6 +15,7 @@ import Logs from './pages/Logs';
 import UserManagement from './pages/UserManagement';
 import TaskManagement from './pages/TaskManagement';
 import ChangePassword from './pages/ChangePassword';
+import NotFound from './pages/NotFound';
 
 function App() {
   return (
@@ -115,7 +116,7 @@ function App() {
                 </PrivateRoute>
               }
             />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
             </Routes>
             </BrowserRouter>
           </AlertProvider>

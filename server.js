@@ -1,18 +1,26 @@
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Root route
-app.get("/", (req, res) => {
+// Serve static files from dist directory
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// API routes
+app.get("/api", (req, res) => {
   res.json({
     message: "FMS Proxy Server is running! 🚀",
     status: "active",
     endpoints: {
-      "GET /": "This message",
+      "GET /api": "This message",
       "GET /api/fms": "API info", 
       "POST /api/fms": "Proxy to Google Apps Script"
     },
@@ -41,6 +49,11 @@ app.post("/api/fms", async (req, res) => {
   });
   const data = await response.json();
   res.json(data);
+});
+
+// SPA fallback - serve index.html for all non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 app.listen(3000, () => console.log("Proxy running on port 3000"));

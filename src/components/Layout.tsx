@@ -33,7 +33,6 @@ export default function Layout({ children }: LayoutProps) {
     { path: '/view-fms', label: 'View FMS', icon: List, roles: ['all'] },
     { path: '/fms-progress', label: 'FMS Progress', icon: Target, roles: ['all'] },
     { path: '/start-project', label: 'Start Project', icon: PlayCircle, roles: ['admin', 'superadmin', 'super admin'] },
-    { path: '/tasks', label: 'Task Management', icon: ListTodo, roles: ['all'] },
     { path: '/logs', label: 'Logs', icon: FileText, roles: ['all'] },
     { path: '/users', label: 'Users', icon: Users, roles: ['admin', 'superadmin', 'super admin'] },
   ];
@@ -66,7 +65,7 @@ export default function Layout({ children }: LayoutProps) {
                 <motion.img
                   whileHover={{ scale: 1.1, rotate: 5 }}
                   transition={{ type: 'spring', stiffness: 300 }}
-                  src="/assets/AMG LOGO.webp" 
+                  src="/AMG LOGO.webp" 
                   alt="AMG Logo" 
                   className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 object-contain rounded-lg shadow-lg"
                   onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {

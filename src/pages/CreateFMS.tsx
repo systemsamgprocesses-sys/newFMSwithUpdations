@@ -459,6 +459,8 @@ graph LR
                       setSteps(newSteps);
                     }}
                     currentFiles={step.attachments || []}
+                    maxFiles={3}
+                    maxSizeMB={5}
                     onPendingFilesChange={(hasPending) => {
                       setPendingUploads(prev => ({
                         ...prev,

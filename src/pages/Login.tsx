@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { LogIn, Workflow, Loader, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
@@ -13,6 +13,7 @@ export default function Login() {
   const [configError, setConfigError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const apiUrl = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -34,7 +35,9 @@ export default function Login() {
         setSuccess(true);
         await login(username);
         setTimeout(() => {
-          navigate('/dashboard');
+          // Redirect to the page they were trying to access, or dashboard by default
+          const from = location.state?.from?.pathname || '/dashboard';
+          navigate(from, { replace: true });
         }, 500);
       } else {
         setError(result.message || 'Login failed');
@@ -59,7 +62,7 @@ export default function Login() {
         <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 animate-fade-in">
           <div className="flex flex-col items-center mb-4 sm:mb-6">
             <img 
-              src="/assets/AMG LOGO.webp" 
+              src="/AMG LOGO.webp" 
               alt="AMG Logo" 
               className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 object-contain mb-4"
               onError={(e) => {

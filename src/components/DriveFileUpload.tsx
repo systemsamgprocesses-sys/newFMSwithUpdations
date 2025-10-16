@@ -29,7 +29,7 @@ const DriveFileUpload = forwardRef<DriveFileUploadHandle, DriveFileUploadProps>(
     onFilesUploaded,
     currentFiles = [],
     maxFiles = 5,
-    maxSizeMB = 10,
+    maxSizeMB = 5,
     onPendingFilesChange
   } = props;
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -109,6 +109,7 @@ const DriveFileUpload = forwardRef<DriveFileUploadHandle, DriveFileUploadProps>(
       // Upload to Google Drive
       const context = fmsName ? `FMS-${fmsName}-Step${stepIndex + 1}` : 'General';
       
+      setProgress(50); // Start upload
       const result = await api.uploadMultipleFiles(filesData, context, username);
       
       setProgress(90);
