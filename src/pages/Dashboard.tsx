@@ -438,11 +438,11 @@ export default function Dashboard() {
     }
   });
 
-  // Fix: Use all tasks for total count, but use tasksAssignedTillToday for completion calculations
+  // Fix: Use all tasks for total count and completion calculations (include future completed tasks)
   const totalTasks = Math.max(0, allUnifiedTasks.length); // All tasks assigned to user
   const fmsTaskCount = allUnifiedTasks.filter(t => t.type === 'FMS').length;
   const tmTaskCount = allUnifiedTasks.filter(t => t.type === 'TASK_MANAGEMENT').length;
-  const completedTasks = tasksAssignedTillToday.filter(t => {
+  const completedTasks = allUnifiedTasks.filter(t => {
     try {
       return t.status === 'Done' || t.status?.toLowerCase() === 'completed';
     } catch (error) {
@@ -468,7 +468,7 @@ export default function Dashboard() {
   // Debug logging
   console.log('🔍 Task Count Debug:', {
     allUnifiedTasks: allUnifiedTasks.length, // All tasks (including future)
-    tasksAssignedTillToday: tasksAssignedTillToday.length, // Tasks due today or before
+    tasksAssignedTillToday: tasksAssignedTillToday.length, // Tasks due today or before (for due tasks calc)
     totalTasks,
     completedTasks,
     completionRate,
