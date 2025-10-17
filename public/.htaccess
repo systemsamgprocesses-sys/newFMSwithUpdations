@@ -1,0 +1,19 @@
+# Apache .htaccess for SPA routing
+# Place this file in your web root directory
+
+RewriteEngine On
+RewriteBase /
+
+# Don't rewrite if the request is for an actual file
+RewriteCond %{REQUEST_FILENAME} !-f
+# Don't rewrite if the request is for an actual directory
+RewriteCond %{REQUEST_FILENAME} !-d
+# Don't rewrite API calls (optional, if you have API routes)
+RewriteCond %{REQUEST_URI} !^/api/
+
+# Rewrite everything else to index.html for SPA routing
+RewriteRule ^ index.html [L]
+
+# Alternative: If you want to exclude other file types
+# RewriteCond %{REQUEST_URI} !\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ [NC]
+# RewriteRule ^ index.html [L]

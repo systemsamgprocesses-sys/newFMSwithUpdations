@@ -438,9 +438,10 @@ export default function Dashboard() {
     }
   });
 
-  const totalTasks = Math.max(0, tasksAssignedTillToday.length); // Ensure non-negative
-  const fmsTaskCount = tasksAssignedTillToday.filter(t => t.type === 'FMS').length;
-  const tmTaskCount = tasksAssignedTillToday.filter(t => t.type === 'TASK_MANAGEMENT').length;
+  // Fix: Use all tasks for total count, but use tasksAssignedTillToday for completion calculations
+  const totalTasks = Math.max(0, allUnifiedTasks.length); // All tasks assigned to user
+  const fmsTaskCount = allUnifiedTasks.filter(t => t.type === 'FMS').length;
+  const tmTaskCount = allUnifiedTasks.filter(t => t.type === 'TASK_MANAGEMENT').length;
   const completedTasks = tasksAssignedTillToday.filter(t => {
     try {
       return t.status === 'Done' || t.status?.toLowerCase() === 'completed';
@@ -466,8 +467,8 @@ export default function Dashboard() {
 
   // Debug logging
   console.log('🔍 Task Count Debug:', {
-    allUnifiedTasks: allUnifiedTasks.length,
-    tasksAssignedTillToday: tasksAssignedTillToday.length,
+    allUnifiedTasks: allUnifiedTasks.length, // All tasks (including future)
+    tasksAssignedTillToday: tasksAssignedTillToday.length, // Tasks due today or before
     totalTasks,
     completedTasks,
     completionRate,
@@ -883,9 +884,9 @@ export default function Dashboard() {
             className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4"
           >
             {[
-              { label: 'Total Tasks', value: Math.max(0, totalTasks), subtitle: 'Till today', color: 'slate', delay: 0.1 },
-              { label: 'FMS Tasks', value: fmsTaskCount, subtitle: 'Till today', color: 'purple', delay: 0.15 },
-              { label: 'Assigned Tasks', value: tmTaskCount, subtitle: 'Till today', color: 'cyan', delay: 0.2 },
+              { label: 'Total Tasks', value: Math.max(0, totalTasks), subtitle: 'All assigned', color: 'slate', delay: 0.1 },
+              { label: 'FMS Tasks', value: fmsTaskCount, subtitle: 'All assigned', color: 'purple', delay: 0.15 },
+              { label: 'Assigned Tasks', value: tmTaskCount, subtitle: 'All assigned', color: 'cyan', delay: 0.2 },
               { label: 'Completed', value: completedTasks, subtitle: '', color: 'green', delay: 0.25 },
               { label: 'Due Tasks', value: dueTasks, subtitle: '', color: 'yellow', delay: 0.3 },
               { label: 'Completion', value: `${completionRate}%`, subtitle: '', color: 'blue', delay: 0.35 },
@@ -911,7 +912,7 @@ export default function Dashboard() {
           <div className="px-4 sm:px-6 py-3">
             <div className="flex gap-2 overflow-x-auto scrollbar-premium pb-2 sm:pb-0">
               {[
-                { id: 'all', icon: ListChecks, label: 'All', count: Math.max(0, totalTasks) },
+                { id: 'all', icon: ListChecks, label: 'All', count: totalTasks },
                 { id: 'due', icon: AlertCircle, label: 'Due Today', count: dueTasks },
                 { id: 'fms', icon: Target, label: 'FMS Projects', count: fmsTaskCount },
                 { id: 'tm', icon: CheckSquare, label: 'Assigned Tasks', count: tmTaskCount },
