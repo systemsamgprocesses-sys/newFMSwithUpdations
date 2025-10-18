@@ -13,7 +13,7 @@ interface FileUploadProps {
 export default function FileUpload({ 
   onFilesSelected, 
   maxFiles = 5, 
-  maxSizeMB = 10,
+  maxSizeMB = 2,
   accept = "*/*",
   label = "Upload Files"
 }: FileUploadProps) {

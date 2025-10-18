@@ -29,7 +29,7 @@ const DriveFileUpload = forwardRef<DriveFileUploadHandle, DriveFileUploadProps>(
     onFilesUploaded,
     currentFiles = [],
     maxFiles = 5,
-    maxSizeMB = 5,
+    maxSizeMB = 2,
     onPendingFilesChange
   } = props;
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -312,9 +312,10 @@ const DriveFileUpload = forwardRef<DriveFileUploadHandle, DriveFileUploadProps>(
         <div className="text-xs text-green-700 bg-green-100 p-2 rounded">
           💡 <strong>How it works:</strong> 
           <ol className="list-decimal ml-4 mt-1 space-y-1">
-            <li>Click above to select files</li>
-            <li>Files will be automatically uploaded when you click "Save FMS Template"</li>
+            <li>Click above to select files (max {maxSizeMB}MB each)</li>
+            <li>Files will be automatically uploaded when you save</li>
             <li>Wait for upload to complete before the FMS is saved</li>
+            <li>⚠️ Large files may take longer to upload</li>
           </ol>
         </div>
       )}

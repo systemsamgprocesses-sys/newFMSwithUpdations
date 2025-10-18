@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: fms-api-server
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+    # Increase payload size limits for file uploads
+    maxRequestBodySize: 10MB
+    # Increase timeout for large uploads
+    healthCheckPath: /api
+    healthCheckTimeout: 60
+

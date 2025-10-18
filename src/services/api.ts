@@ -39,12 +39,19 @@ async function callAppsScript(action: string, payload: Record<string, any> = {},
   
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
+      // Add timeout to prevent long waits
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,
-        mode: 'cors'
+        mode: 'cors',
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`);
@@ -89,7 +96,8 @@ export const api = {
   // expects Apps Script action 'login' -> returns user/session info
   async login(username: string, password: string) {
     // avoid logging sensitive data in production
-    return callAppsScript('login', { username, password });
+    // No retries for login - credentials are either valid or not
+    return callAppsScript('login', { username, password }, 1);
   },
 
   // Change password
@@ -332,47 +340,52 @@ export const api = {
 
   // Upload multiple files to Drive (with chunking to avoid 413 errors)
   async uploadMultipleFiles(files: Array<{ data: string; name: string; mimeType: string }>, context?: string, username?: string) {
-    // For large payloads, upload files one by one to avoid 413 errors
-    if (files.length > 1 || files.some(f => f.data.length > 5000000)) { // 5MB per file threshold
-      const results = [];
-      const errors = [];
-      
-      for (let i = 0; i < files.length; i++) {
-        try {
-          const result = await callAppsScript('uploadFile', {
-            fileData: files[i].data,
-            fileName: files[i].name,
-            mimeType: files[i].mimeType,
-            uploadedBy: username || 'unknown',
-            context: context || 'General'
-          });
-          
-          if (result.success && result.file) {
-            results.push(result.file);
-          } else {
-            errors.push(`Failed to upload ${files[i].name}: ${result.message || 'Unknown error'}`);
-          }
-        } catch (error: any) {
-          errors.push(`Failed to upload ${files[i].name}: ${error.message || 'Upload error'}`);
+    // ALWAYS upload files one by one to avoid 413 errors
+    // Base64 encoding increases size by ~33%, and server has strict payload limits
+    const results = [];
+    const errors = [];
+    
+    for (let i = 0; i < files.length; i++) {
+      try {
+        // Check if file is too large (> 2MB base64 data = ~1.5MB original)
+        const base64SizeMB = files[i].data.length / (1024 * 1024);
+        if (base64SizeMB > 2.5) {
+          errors.push(`File "${files[i].name}" is too large (${base64SizeMB.toFixed(2)}MB encoded). Max 2MB allowed.`);
+          continue;
         }
+        
+        const result = await callAppsScript('uploadFile', {
+          fileData: files[i].data,
+          fileName: files[i].name,
+          mimeType: files[i].mimeType,
+          uploadedBy: username || 'unknown',
+          context: context || 'General'
+        }, 3); // 3 retries
+        
+        if (result.success && result.file) {
+          results.push(result.file);
+        } else {
+          errors.push(`${files[i].name}: ${result.message || 'Unknown error'}`);
+        }
+      } catch (error: any) {
+        // Better error messages for 413
+        const errorMsg = error.message?.includes('413') 
+          ? 'File too large for server'
+          : error.message || 'Upload error';
+        errors.push(`${files[i].name}: ${errorMsg}`);
       }
-      
-      return {
-        success: results.length > 0,
-        files: results,
-        errors: errors,
-        message: results.length === files.length 
-          ? `All ${files.length} files uploaded successfully`
-          : `${results.length}/${files.length} files uploaded successfully`
-      };
-    } else {
-      // For small payloads, use the original batch upload
-      return callAppsScript('uploadMultipleFiles', {
-        files,
-        context,
-        uploadedBy: username || 'unknown'
-      });
     }
+    
+    return {
+      success: results.length > 0,
+      files: results,
+      errors: errors,
+      message: results.length === files.length 
+        ? `All ${files.length} file(s) uploaded successfully`
+        : results.length > 0
+        ? `${results.length}/${files.length} file(s) uploaded successfully`
+        : 'All uploads failed'
+    };
   },
 
   // Delete file from Drive

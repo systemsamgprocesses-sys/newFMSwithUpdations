@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, LayoutDashboard, GitBranch, PlayCircle, FileText, List, Users, AlertTriangle, ListTodo, Lock, Target } from 'lucide-react';
+import { LogOut, LayoutDashboard, GitBranch, PlayCircle, FileText, List, Users, AlertTriangle, Lock, Target } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
@@ -93,7 +93,7 @@ export default function Layout({ children }: LayoutProps) {
               transition={{ delay: 0.2 }}
               className="overflow-x-auto scrollbar-premium -mx-3 px-3 lg:mx-0 lg:px-0 lg:flex-1"
             >
-              <div className="flex gap-1 lg:gap-2 min-w-max lg:min-w-0 lg:justify-center">
+              <div className="flex gap-1 sm:gap-1.5 lg:gap-2 min-w-max lg:min-w-0 lg:justify-center">
                 {filteredNavItems.map((item, index) => {
                   const Icon = item.icon;
                   const isActive = location.pathname === item.path;
@@ -106,14 +106,15 @@ export default function Layout({ children }: LayoutProps) {
                       whileHover={{ scale: 1.05, y: -2 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => navigate(item.path)}
-                      className={`btn-premium flex items-center gap-1 sm:gap-2 px-2 sm:px-3 lg:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
+                      className={`btn-premium flex items-center gap-1 sm:gap-2 px-2 sm:px-3 lg:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap min-w-fit ${
                         isActive
                           ? 'bg-gradient-to-r from-accent-600 to-brand-600 text-white shadow-glow'
                           : 'text-slate-700 hover:bg-white/80 hover:text-slate-900'
                       }`}
                     >
                       <Icon className="w-3 h-3 sm:w-4 sm:h-4" />
-                      <span className="hidden sm:inline">{item.label}</span>
+                      <span className="hidden md:inline">{item.label}</span>
+                      <span className="hidden sm:inline md:hidden">{item.label.split(' ')[0]}</span>
                       <span className="sm:hidden">{item.label.split(' ')[0]}</span>
                     </motion.button>
                   );
@@ -176,7 +177,7 @@ export default function Layout({ children }: LayoutProps) {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ type: 'spring', duration: 0.5 }}
-              className="fixed inset-0 flex items-center justify-center z-50 p-4 pointer-events-none"
+              className="fixed inset-0 flex items-center justify-center z-[60] p-4 pointer-events-none"
             >
               <div className="bg-white rounded-xl shadow-premium max-w-md w-full p-6 pointer-events-auto">
             <div className="flex items-center gap-3 mb-4">
