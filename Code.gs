@@ -2669,7 +2669,8 @@ function getObjectionsSheet() {
       'Reviewed_By',
       'Reviewed_On',
       'Action_Taken',
-      'New_Task_ID'
+      'New_Task_ID',
+      'Tagged_Users'  // New column for tagged users
     ]);
   }
   return sheet;
@@ -2702,6 +2703,7 @@ function raiseObjection(params) {
     }
     
     const objectionsSheet = getObjectionsSheet();
+    const taggedUsersStr = params.taggedUsers ? JSON.stringify(params.taggedUsers) : '';
     objectionsSheet.appendRow([
       objectionId,
       params.taskId,
@@ -2716,7 +2718,8 @@ function raiseObjection(params) {
       '',
       '',
       '',
-      ''
+      '',
+      taggedUsersStr  // Tagged users as JSON string
     ]);
     
     // Log activity
@@ -2741,6 +2744,11 @@ function raiseObjection(params) {
 
 /**
  * Get objections for review by a user
+ * Now includes:
+ * - Objections routed to user (for review)
+ * - Objections where user is tagged (for visibility)
+ * - Objections raised by user (their own objections)
+ * - All statuses (Pending, Approved-Terminate, Approved-Replace, Rejected, Hold)
  */
 function getObjections(userId) {
   try {
@@ -2755,8 +2763,27 @@ function getObjections(userId) {
     
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      // Show objections routed to this user and still pending
-      if (row[7] === userId && row[9] === 'Pending') {
+      let isTagged = false;
+      let taggedUsers = [];
+      
+      // Parse tagged users if exists
+      if (row[14]) {  // Tagged_Users column
+        try {
+          taggedUsers = JSON.parse(row[14]);
+          isTagged = taggedUsers.includes(userId);
+        } catch (e) {
+          // If parsing fails, ignore
+        }
+      }
+      
+      const isRoutedTo = row[7] === userId;      // User is the reviewer
+      const isRaisedBy = row[5] === userId;      // User raised the objection
+      
+      // Show objections where user is:
+      // 1. Routed to (reviewer)
+      // 2. Tagged (for visibility)
+      // 3. The person who raised it
+      if (isRoutedTo || isTagged || isRaisedBy) {
         objections.push({
           objectionId: row[0],
           taskId: row[1],
@@ -2767,7 +2794,15 @@ function getObjections(userId) {
           raisedOn: row[6],
           routeTo: row[7],
           taskType: row[8],
-          status: row[9]
+          status: row[9],
+          reviewedBy: row[10] || '',
+          reviewedOn: row[11] || '',
+          actionTaken: row[12] || '',
+          newTaskId: row[13] || '',
+          taggedUsers: taggedUsers,
+          isTagged: isTagged,           // User is tagged
+          isRaisedByMe: isRaisedBy,     // User raised this objection
+          isRoutedToMe: isRoutedTo      // User is the reviewer
         });
       }
     }

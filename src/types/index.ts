@@ -164,8 +164,13 @@ export interface Objection {
   raisedOn: string;
   reviewedBy?: string;
   reviewedOn?: string;
-  status: 'Pending' | 'Approved-Terminate' | 'Approved-Replace' | 'Rejected';
+  status: 'Pending' | 'Approved-Terminate' | 'Approved-Replace' | 'Rejected' | 'Hold';
   actionTaken?: string;
   taskType: 'FMS' | 'TASK_MANAGEMENT';
   routeTo: string; // username of reviewer
+  taggedUsers?: string[]; // users tagged for visibility
+  isTagged?: boolean; // true if current user is tagged (not routed)
+  isRaisedByMe?: boolean; // true if current user raised this objection
+  isRoutedToMe?: boolean; // true if current user is the reviewer
+  newTaskId?: string; // new task ID if replaced
 }

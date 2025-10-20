@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckSquare, Loader, Calendar, ListChecks, AlertCircle, TrendingUp, Target, X, Paperclip, ExternalLink, CheckCircle, Plus, Send, BarChart3 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -8,7 +8,7 @@ import { useAlert } from '../context/AlertContext';
 import { api } from '../services/api';
 import { ProjectTask, TaskData, TaskUser, ScoringData } from '../types';
 import { SkeletonDashboard } from '../components/SkeletonLoader';
-import DriveFileUpload from '../components/DriveFileUpload';
+import DriveFileUpload, { DriveFileUploadHandle } from '../components/DriveFileUpload';
 
 interface UnifiedTask {
   id: string;
@@ -63,6 +63,7 @@ export default function Dashboard() {
 
   // Unified state
   const [activeTab, setActiveTab] = useState<'assignedToMe' | 'iAssigned' | 'allTasks' | 'fms' | 'tm' | 'due' | 'objections' | 'assign' | 'performance'>('assignedToMe');
+  const [objectionSubTab, setObjectionSubTab] = useState<'all' | 'raised' | 'review' | 'tagged'>('all');
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -107,6 +108,7 @@ export default function Dashboard() {
   const [showObjectionModal, setShowObjectionModal] = useState(false);
   const [selectedTaskForObjection, setSelectedTaskForObjection] = useState<UnifiedTask | null>(null);
   const [objectionReason, setObjectionReason] = useState('');
+  const [objectionTaggedUsers, setObjectionTaggedUsers] = useState<string[]>([]);
   
   const [success, setSuccess] = useState('');
 
@@ -121,6 +123,7 @@ export default function Dashboard() {
     attachments: [] as any[]
   });
   const [hasPendingUploads, setHasPendingUploads] = useState(false);
+  const fileUploadRef = useRef<DriveFileUploadHandle>(null);
   
   // Performance/Scoring state
   const [selectedScoringUser, setSelectedScoringUser] = useState(user?.username || '');
@@ -227,16 +230,23 @@ export default function Dashboard() {
   const handleAssignTask = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (hasPendingUploads) {
-      setError('⚠️ Files are selected but not uploaded! Click "Upload to Drive Now!" button first.');
-      return;
-    }
-    
     setTmLoading(true);
     setError('');
     setSuccess('');
     
     try {
+      // Auto-upload pending files if any
+      if (hasPendingUploads && fileUploadRef.current) {
+        const uploadSuccess = await fileUploadRef.current.uploadPendingFiles();
+        if (!uploadSuccess) {
+          setError('Failed to upload files. Please try again.');
+          setTmLoading(false);
+          return;
+        }
+        // Wait a moment for the state to update with uploaded files
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
       const result = await api.assignTask({
         givenBy: user!.username,
         assignedTo: assignForm.assignedTo,
@@ -753,14 +763,17 @@ export default function Dashboard() {
         reason: objectionReason,
         raisedBy: user!.username,
         taskType: task.type,
-        taskGiver: task.createdBy
+        taskGiver: task.createdBy,
+        taggedUsers: objectionTaggedUsers  // Include tagged users
       });
 
       if (result.success) {
         setShowObjectionModal(false);
         showSuccess('Objection raised successfully! ' + result.message);
         setObjectionReason('');
+        setObjectionTaggedUsers([]);  // Reset tagged users
         setSelectedTaskForObjection(null);
+        await loadObjections();  // Reload objections
       } else {
         showError(result.message || 'Failed to raise objection');
       }
@@ -1292,7 +1305,75 @@ export default function Dashboard() {
           {activeTab === 'objections' ? (
             // Objections Section
             <div>
-              <h2 className="text-xl font-bold text-slate-900 mb-4">Objection Reviews</h2>
+              <h2 className="text-xl font-bold text-slate-900 mb-2">My Objections</h2>
+              <p className="text-sm text-slate-600 mb-4">
+                Includes objections you raised, for your review, and where you're tagged
+              </p>
+              
+              {/* Sub-tabs for objections */}
+              <div className="flex gap-2 mb-6 flex-wrap">
+                <button
+                  onClick={() => setObjectionSubTab('all')}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    objectionSubTab === 'all'
+                      ? 'bg-red-600 text-white shadow-lg'
+                      : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  All Objections
+                  {objections.length > 0 && (
+                    <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-white/20">
+                      {objections.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setObjectionSubTab('raised')}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    objectionSubTab === 'raised'
+                      ? 'bg-purple-600 text-white shadow-lg'
+                      : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  📝 I Raised
+                  {objections.filter(o => o.isRaisedByMe).length > 0 && (
+                    <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-white/20">
+                      {objections.filter(o => o.isRaisedByMe).length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setObjectionSubTab('review')}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    objectionSubTab === 'review'
+                      ? 'bg-green-600 text-white shadow-lg'
+                      : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  ⚖️ For My Review
+                  {objections.filter(o => o.isRoutedToMe && !o.isRaisedByMe).length > 0 && (
+                    <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-white/20">
+                      {objections.filter(o => o.isRoutedToMe && !o.isRaisedByMe).length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setObjectionSubTab('tagged')}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    objectionSubTab === 'tagged'
+                      ? 'bg-blue-600 text-white shadow-lg'
+                      : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  🏷️ Tagged
+                  {objections.filter(o => o.isTagged && !o.isRaisedByMe && !o.isRoutedToMe).length > 0 && (
+                    <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-white/20">
+                      {objections.filter(o => o.isTagged && !o.isRaisedByMe && !o.isRoutedToMe).length}
+                    </span>
+                  )}
+                </button>
+              </div>
+              
               {objectionsLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader className="w-8 h-8 animate-spin text-slate-600" />
@@ -1300,23 +1381,66 @@ export default function Dashboard() {
               ) : objections.length === 0 ? (
                 <div className="text-center py-12 text-slate-600">
                   <AlertCircle className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg font-medium">No pending objections</p>
+                  <p className="text-lg font-medium">No objections</p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {objections.map((objection) => (
+                  {objections
+                    .filter(objection => {
+                      if (objectionSubTab === 'all') return true;
+                      if (objectionSubTab === 'raised') return objection.isRaisedByMe;
+                      if (objectionSubTab === 'review') return objection.isRoutedToMe && !objection.isRaisedByMe;
+                      if (objectionSubTab === 'tagged') return objection.isTagged && !objection.isRaisedByMe && !objection.isRoutedToMe;
+                      return true;
+                    })
+                    .map((objection) => {
+                    const getStatusColor = () => {
+                      switch (objection.status) {
+                        case 'Pending': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+                        case 'Approved-Terminate': return 'bg-red-100 text-red-800 border-red-300';
+                        case 'Approved-Replace': return 'bg-green-100 text-green-800 border-green-300';
+                        case 'Rejected': return 'bg-slate-100 text-slate-800 border-slate-300';
+                        case 'Hold': return 'bg-orange-100 text-orange-800 border-orange-300';
+                        default: return 'bg-gray-100 text-gray-800 border-gray-300';
+                      }
+                    };
+
+                    return (
                     <div key={objection.objectionId} className="bg-red-50 border border-red-200 rounded-lg p-4">
                       <div className="flex flex-col gap-4">
                         <div className="flex-1">
-                          <div className="flex items-start gap-2 mb-2">
-                            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                            <div className="flex-1">
-                              <h3 className="font-bold text-slate-900 mb-1">
-                                {objection.taskDescription}
-                              </h3>
-                              <p className="text-sm text-red-700">
-                                <strong>Type:</strong> {objection.taskType === 'FMS' ? 'FMS Project Task' : 'Delegated Task'}
-                              </p>
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                              <div className="flex-1">
+                                <h3 className="font-bold text-slate-900 mb-1">
+                                  {objection.taskDescription}
+                                </h3>
+                                <p className="text-sm text-red-700">
+                                  <strong>Type:</strong> {objection.taskType === 'FMS' ? 'FMS Project Task' : 'Delegated Task'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-2 items-end">
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor()}`}>
+                                {objection.status}
+                              </span>
+                              {/* Show user's relationship to this objection */}
+                              {objection.isRaisedByMe && (
+                                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                                  📝 I Raised This
+                                </span>
+                              )}
+                              {objection.isRoutedToMe && !objection.isRaisedByMe && (
+                                <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                                  ⚖️ For My Review
+                                </span>
+                              )}
+                              {objection.isTagged && !objection.isRaisedByMe && !objection.isRoutedToMe && (
+                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                                  🏷️ Tagged
+                                </span>
+                              )}
                             </div>
                           </div>
                           
@@ -1327,49 +1451,86 @@ export default function Dashboard() {
                             <p className="text-sm text-slate-900">{objection.reason}</p>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                          <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-2">
                             <p><strong>Raised by:</strong> {objection.raisedBy}</p>
                             <p><strong>Raised on:</strong> {formatDate(objection.raisedOn)}</p>
-                            {objection.projectId && (
-                              <p><strong>Project:</strong> {objection.projectId}</p>
-                            )}
+                            <p><strong>Routed to:</strong> {objection.routeTo}</p>
                             <p><strong>Task ID:</strong> {objection.taskId}</p>
+                            {objection.projectId && (
+                              <p className="col-span-2"><strong>Project:</strong> {objection.projectId}</p>
+                            )}
+                            {objection.reviewedBy && (
+                              <>
+                                <p><strong>Reviewed by:</strong> {objection.reviewedBy}</p>
+                                <p><strong>Reviewed on:</strong> {formatDate(objection.reviewedOn)}</p>
+                              </>
+                            )}
+                            {objection.actionTaken && (
+                              <p className="col-span-2"><strong>Action Taken:</strong> {objection.actionTaken}</p>
+                            )}
+                            {objection.newTaskId && (
+                              <p className="col-span-2"><strong>New Task ID:</strong> {objection.newTaskId}</p>
+                            )}
                           </div>
+
+                          {objection.taggedUsers && objection.taggedUsers.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              <span className="text-xs font-medium text-slate-600">Tagged:</span>
+                              {objection.taggedUsers.map((userId: string) => {
+                                const taggedUser = taskUsers.find(u => u.userId === userId);
+                                const displayName = taggedUser ? `${taggedUser.name} (${userId})` : userId;
+                                return (
+                                  <span key={userId} className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs">
+                                    {displayName}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
 
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <button
-                            onClick={() => handleHoldAction(objection, 'reject')}
-                            disabled={updating === objection.objectionId}
-                            className="flex-1 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors text-sm disabled:opacity-50"
-                          >
-                            Reject Objection
-                          </button>
-                          <button
-                            onClick={() => handleHoldAction(objection, 'terminate')}
-                            disabled={updating === objection.objectionId}
-                            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm disabled:opacity-50"
-                          >
-                            Terminate Task
-                          </button>
-                          <button
-                            onClick={() => handleHoldAction(objection, 'replace')}
-                            disabled={updating === objection.objectionId}
-                            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm disabled:opacity-50"
-                          >
-                            Terminate & Create New
-                          </button>
-                          <button
-                            onClick={() => handleHoldAction(objection, 'hold')}
-                            disabled={updating === objection.objectionId}
-                            className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm disabled:opacity-50"
-                          >
-                            Hold Task
-                          </button>
-                        </div>
+                        {/* Only show action buttons if pending and user is the reviewer (not if they raised it or are just tagged) */}
+                        {objection.status === 'Pending' && objection.isRoutedToMe && !objection.isRaisedByMe ? (
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <button
+                              onClick={() => handleHoldAction(objection, 'reject')}
+                              disabled={updating === objection.objectionId}
+                              className="flex-1 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors text-sm disabled:opacity-50"
+                            >
+                              Reject Objection
+                            </button>
+                            <button
+                              onClick={() => handleHoldAction(objection, 'terminate')}
+                              disabled={updating === objection.objectionId}
+                              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm disabled:opacity-50"
+                            >
+                              Terminate Task
+                            </button>
+                            <button
+                              onClick={() => handleHoldAction(objection, 'replace')}
+                              disabled={updating === objection.objectionId}
+                              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm disabled:opacity-50"
+                            >
+                              Terminate & Create New
+                            </button>
+                            <button
+                              onClick={() => handleHoldAction(objection, 'hold')}
+                              disabled={updating === objection.objectionId}
+                              className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm disabled:opacity-50"
+                            >
+                              Hold Task
+                            </button>
+                          </div>
+                        ) : objection.status === 'Pending' && (objection.isTagged || objection.isRaisedByMe) && (
+                          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+                            ℹ️ {objection.isRaisedByMe 
+                              ? 'You raised this objection. Only the reviewer can take action.' 
+                              : 'You are tagged for visibility. Only the reviewer can take action.'}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  );})}
                 </div>
               )}
             </div>
@@ -1455,6 +1616,7 @@ export default function Dashboard() {
                     📎 Attachments (Optional)
                   </label>
                   <DriveFileUpload
+                    ref={fileUploadRef}
                     fmsName={`Task-${assignForm.description.substring(0, 20)}`}
                     username={user!.username}
                     onFilesUploaded={(files) => {
@@ -2049,18 +2211,30 @@ export default function Dashboard() {
               </button>
             </div>
 
-            <div className="relative mb-6 p-4 bg-gradient-to-br from-red-50/80 to-orange-50/80 border border-red-200/60 rounded-2xl backdrop-blur-sm">
-              <div className="flex items-start gap-2 mb-2">
-                <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                <p className="text-sm font-semibold text-red-900">
-                  Warning: Raising an objection will route this task for review
+            <div className="relative mb-6 space-y-3">
+              <div className="p-4 bg-gradient-to-br from-red-50/80 to-orange-50/80 border border-red-200/60 rounded-2xl backdrop-blur-sm">
+                <div className="flex items-start gap-2 mb-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm font-semibold text-red-900">
+                    Warning: Raising an objection will route this task for review
+                  </p>
+                </div>
+                <p className="text-xs text-red-700/90 pl-6">
+                  {selectedTaskForObjection.type === 'FMS' 
+                    ? 'This will be sent to the Step 1 person for review.'
+                    : 'This will be sent to the task assigner for review.'}
                 </p>
               </div>
-              <p className="text-xs text-red-700/90 pl-6">
-                {selectedTaskForObjection.type === 'FMS' 
-                  ? 'This will be sent to the Step 1 person for review.'
-                  : 'This will be sent to the task giver for review.'}
-              </p>
+              
+              <div className="p-4 bg-yellow-50 border border-yellow-300 rounded-2xl">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-yellow-700 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-yellow-900">
+                    <strong>Important:</strong> Please note this should be a genuine reason to raise the objection. 
+                    Raising unnecessary objections will negatively affect your performance evaluation.
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="mb-6">
@@ -2091,6 +2265,54 @@ export default function Dashboard() {
                 <p className="text-xs text-slate-500 mt-1">
                   Be specific and provide details to help the reviewer understand your concerns.
                 </p>
+              </div>
+
+              {/* Tag Users for Visibility */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Tag Users (Optional)
+                </label>
+                <select
+                  multiple
+                  value={objectionTaggedUsers}
+                  onChange={(e) => {
+                    const selected = Array.from(e.target.selectedOptions, option => option.value);
+                    setObjectionTaggedUsers(selected);
+                  }}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  size={4}
+                >
+                  {taskUsers.map(u => (
+                    <option key={u.userId} value={u.userId}>
+                      {u.name} ({u.userId}) - {u.department}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  Hold Ctrl/Cmd to select multiple users who should be notified about this objection
+                </p>
+                {objectionTaggedUsers.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {objectionTaggedUsers.map(userId => {
+                      const user = taskUsers.find(u => u.userId === userId);
+                      const displayName = user ? `${user.name} (${user.userId})` : userId;
+                      return (
+                        <span
+                          key={userId}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs"
+                        >
+                          {displayName}
+                          <button
+                            onClick={() => setObjectionTaggedUsers(prev => prev.filter(u => u !== userId))}
+                            className="hover:bg-red-200 rounded-full p-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 

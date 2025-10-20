@@ -2,7 +2,7 @@ import { FMSStep } from '../types';
 import { cache } from './cache';
 
 // Use local proxy server to avoid CORS issues
-const API_URL = 'https://api-for-fms.onrender.com/api/fms';
+const API_URL = 'https://newfmswithupdations.onrender.com/api/fms';
 
 // Smart TTL based on action type
 const getCacheTTL = (action: string): number => {
@@ -117,7 +117,7 @@ export const api = {
 
   async createUser(...args: any[]) {
     // Usage patterns in workspace:
-    // 1) api.createUser(userRecord)
+    // 1)   api.createUser({ username, password, name, role, department })
     // 2) api.createUser(username, password, name, role, department)
     cache.invalidatePattern('getUsers'); // Invalidate user cache
     if (args.length === 1 && typeof args[0] === 'object') {

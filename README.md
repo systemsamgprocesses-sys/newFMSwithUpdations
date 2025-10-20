@@ -178,6 +178,46 @@ The Google Apps Script backend supports these actions:
 - `updateTaskStatus`: Update task status
 - `getAllLogs`: Get activity logs
 
+## Deployment
+
+### Deploying the Backend Server
+
+The project includes a separate `server/` directory with a Node.js backend that acts as a proxy to Google Apps Script.
+
+**For Render Deployment:**
+1. See detailed instructions in `server/DEPLOYMENT_GUIDE.md`
+2. Key settings:
+   - **Root Directory**: `server`
+   - **Build Command**: `cd .. && npm install && npm run build && cd server && npm install`
+   - **Start Command**: `npm start`
+
+**Quick Deploy:**
+```bash
+# Push to GitHub
+git add .
+git commit -m "Deploy server"
+git push origin main
+
+# On Render Dashboard:
+# 1. New Web Service
+# 2. Connect your repo
+# 3. Set Root Directory to "server"
+# 4. Deploy!
+```
+
+After deployment, update `src/services/api.ts` with your server URL:
+```typescript
+const API_URL = "https://your-service-name.onrender.com/api/fms";
+```
+
+### Deploying the Frontend
+
+For static hosting (Netlify, Vercel, etc.):
+```bash
+npm run build
+# Deploy the dist/ folder
+```
+
 ## Troubleshooting
 
 ### Connection Error

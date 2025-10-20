@@ -3,10 +3,8 @@ services:
     name: fms-api-server
     env: node
     # Build both the frontend and server
-    buildCommand: cd .. && npm install && npm run build && cd server && npm install
-    startCommand: npm run start
-    # Set the root directory to the server folder
-    rootDir: server
+    buildCommand: npm install && npm run build && cd server && npm install
+    startCommand: cd server && npm run start
     envVars:
       - key: NODE_ENV
         value: production

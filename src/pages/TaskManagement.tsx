@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { 
   ListTodo, 
@@ -19,7 +19,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { TaskData, TaskSummary, TaskUser, ScoringData } from '../types';
-import DriveFileUpload from '../components/DriveFileUpload';
+import DriveFileUpload, { DriveFileUploadHandle } from '../components/DriveFileUpload';
 
 type TabType = 'overview' | 'upcoming' | 'pending' | 'all' | 'revisions' | 'assign' | 'scoring';
 
@@ -61,6 +61,7 @@ export default function TaskManagement() {
     attachments: [] as any[]
   });
   const [hasPendingUploads, setHasPendingUploads] = useState(false);
+  const fileUploadRef = useRef<DriveFileUploadHandle>(null);
   
   // Scoring data
   const [scoringData, setScoringData] = useState<ScoringData | null>(null);
@@ -185,17 +186,23 @@ export default function TaskManagement() {
   const handleAssignTask = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Check for pending uploads
-    if (hasPendingUploads) {
-      setError('⚠️ Files are selected but not uploaded! Click "Upload to Drive Now!" button first.');
-      return;
-    }
-    
     setLoading(true);
     setError('');
     setSuccess('');
     
     try {
+      // Auto-upload pending files if any
+      if (hasPendingUploads && fileUploadRef.current) {
+        const uploadSuccess = await fileUploadRef.current.uploadPendingFiles();
+        if (!uploadSuccess) {
+          setError('Failed to upload files. Please try again.');
+          setLoading(false);
+          return;
+        }
+        // Wait a moment for the state to update with uploaded files
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
       const result = await api.assignTask({
         givenBy: user!.username,
         assignedTo: assignForm.assignedTo,
@@ -686,6 +693,7 @@ export default function TaskManagement() {
                     📎 Attachments (Optional)
                   </label>
                   <DriveFileUpload
+                    ref={fileUploadRef}
                     fmsName={`Task-${assignForm.description.substring(0, 20)}`}
                     username={user!.username}
                     onFilesUploaded={(files) => {

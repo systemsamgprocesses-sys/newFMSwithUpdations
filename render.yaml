@@ -1,3 +1,16 @@
+# ⚠️ DEPRECATED - DO NOT USE THIS FILE
+# 
+# This render.yaml file is deprecated.
+# Please use the one in the server/ directory instead.
+#
+# For deployment instructions, see: server/DEPLOYMENT_GUIDE.md
+#
+# Quick setup on Render:
+# 1. Set Root Directory to "server"
+# 2. The server/render.yaml will be used automatically
+#
+# This file is kept for reference only.
+
 services:
   - type: web
     name: fms-api-server
