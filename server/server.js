@@ -43,7 +43,7 @@ app.get("/api/fms", (req, res) => {
 });
 
 app.post("/api/fms", async (req, res) => {
-  const scriptUrl = "https://script.google.com/macros/s/AKfycbzY0FI3HR0HelEDywfOfor7wJ-vu6kh0u43MPaY2JD0cX55WFJe1s_uzEmvW_jzLS6m/exec";
+  const scriptUrl = "https://script.google.com/macros/s/AKfycbw3McIgsEx6yH2RXKmsjG3WMn7yzosXQfpqOxgSG9OlFsG8FTlnHOqHiZ0OfZ1p_xDeVg/exec";
   
   try {
     const bodySize = Buffer.byteLength(JSON.stringify(req.body));
