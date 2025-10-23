@@ -13,12 +13,11 @@ import {
   Send,
   X,
   BarChart3,
-  Filter,
   Search
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import { TaskData, TaskSummary, TaskUser, ScoringData } from '../types';
+import { TaskData, TaskSummary, TaskUser, ScoringData, DependentTask } from '../types';
 import DriveFileUpload, { DriveFileUploadHandle } from '../components/DriveFileUpload';
 
 type TabType = 'overview' | 'upcoming' | 'pending' | 'all' | 'revisions' | 'assign' | 'scoring';
@@ -79,6 +78,11 @@ export default function TaskManagement() {
     newDate: '',
     reason: ''
   });
+  
+  // Dependent tasks modal
+  const [showDependentTasksModal, setShowDependentTasksModal] = useState(false);
+  const [dependentTasks, setDependentTasks] = useState<DependentTask[]>([]);
+  const [dependentTaskDates, setDependentTaskDates] = useState<Record<string, string>>({});
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -249,6 +253,21 @@ export default function TaskManagement() {
       );
       
       if (result.success) {
+        // Check if there are dependent tasks that need a planned date
+        if (result.dependentTasks && result.dependentTasks.length > 0) {
+          const tasksNeedingDate = result.dependentTasks.filter((dt: DependentTask) => dt.needsPlannedDate);
+          
+          if (tasksNeedingDate.length > 0) {
+            // Show modal to set planned dates for dependent tasks
+            setDependentTasks(tasksNeedingDate);
+            setDependentTaskDates({});
+            setShowUpdateModal(false);
+            setShowDependentTasksModal(true);
+            setLoading(false);
+            return;
+          }
+        }
+        
         setSuccess('Task updated successfully!');
         setShowUpdateModal(false);
         setSelectedTask(null);
@@ -270,6 +289,42 @@ export default function TaskManagement() {
     setUpdateAction(action);
     setRevisionData({ newDate: '', reason: '' });
     setShowUpdateModal(true);
+  };
+
+  const handleDependentTaskDatesSubmit = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      // Update planned dates for all dependent tasks
+      const updatePromises = dependentTasks.map(async (task) => {
+        const plannedDate = dependentTaskDates[task.taskId];
+        if (plannedDate) {
+          return await api.updateDependentTaskPlannedDate(task.taskId, plannedDate);
+        }
+        return { success: true };
+      });
+      
+      const results = await Promise.all(updatePromises);
+      const allSuccess = results.every(r => r.success);
+      
+      if (allSuccess) {
+        setSuccess('Task completed and dependent task dates updated successfully!');
+        setShowDependentTasksModal(false);
+        setDependentTasks([]);
+        setDependentTaskDates({});
+        setSelectedTask(null);
+        loadSummary();
+        loadTasks(activeTab === 'overview' ? 'all' : activeTab);
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setError('Some dependent task dates failed to update');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to update dependent task dates');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadScoringData = async () => {
@@ -934,6 +989,102 @@ export default function TaskManagement() {
                   <>
                     {updateAction === 'complete' ? <CheckCircle className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
                     {updateAction === 'complete' ? 'Complete' : 'Request Revision'}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dependent Tasks Modal - Set Planned Dates */}
+      {showDependentTasksModal && dependentTasks.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-slate-900">
+                Set Planned Dates for Dependent Tasks
+              </h3>
+              <button
+                onClick={() => {
+                  setShowDependentTasksModal(false);
+                  setDependentTasks([]);
+                  setDependentTaskDates({});
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Task completed successfully!</strong> The following task(s) depend on the completion of this step. 
+                Please provide a planned date for each dependent task:
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              {dependentTasks.map((task) => (
+                <div key={task.taskId} className="border border-slate-200 rounded-lg p-4">
+                  <div className="mb-3">
+                    <p className="text-sm text-slate-600 mb-1">
+                      <strong>Task ID:</strong> {task.taskId}
+                    </p>
+                    <p className="text-sm text-slate-600 mb-1">
+                      <strong>Assigned To:</strong> {task.assignedTo}
+                    </p>
+                    <p className="text-sm text-slate-600 mb-3">
+                      <strong>Description:</strong> {task.description}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      <Calendar className="w-4 h-4 inline mr-1" />
+                      Planned Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={dependentTaskDates[task.taskId] || ''}
+                      onChange={(e) => setDependentTaskDates({
+                        ...dependentTaskDates,
+                        [task.taskId]: e.target.value
+                      })}
+                      min={new Date().toISOString().split('T')[0]}
+                      required
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDependentTasksModal(false);
+                  setDependentTasks([]);
+                  setDependentTaskDates({});
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDependentTaskDatesSubmit}
+                disabled={loading || dependentTasks.some(t => !dependentTaskDates[t.taskId])}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Submit Dates
                   </>
                 )}
               </button>

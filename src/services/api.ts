@@ -204,6 +204,14 @@ export const api = {
     return callAppsScript('updateTaskStatus', { rowIndex, status, username });
   },
 
+  // Update planned date for dependent FMS step
+  async updateFMSStepPlannedDate(projectId: string, stepNo: number, plannedDate: string) {
+    cache.invalidatePattern('getAllProjects');
+    cache.invalidatePattern('getProjectsByUser');
+    cache.invalidatePattern('getAllLogs');
+    return callAppsScript('updateFMSStepPlannedDate', { projectId, stepNo, plannedDate });
+  },
+
   // Submit progress with attachments (uploads files to Drive)
   async submitProgressWithAttachments(params: {
     projectId: string;
@@ -263,6 +271,14 @@ export const api = {
     cache.invalidatePattern('getAllLogs');
     cache.invalidatePattern('getScoringData');
     return callAppsScript('updateTask', { taskId, taskAction: action, extraData });
+  },
+
+  // Update planned date for a dependent task
+  async updateDependentTaskPlannedDate(taskId: string, plannedDate: string) {
+    cache.invalidatePattern('getTasks');
+    cache.invalidatePattern('getTaskSummary');
+    cache.invalidatePattern('getAllLogs');
+    return callAppsScript('updateDependentTaskPlannedDate', { taskId, plannedDate });
   },
 
   // Batch update multiple tasks

@@ -276,7 +276,7 @@ function ensureSheetsExist() {
         'DEPARTMENT', 'TASK FREQUENCY', 'PLANNED DATE', 'Task Status',
         'completed on', 'Task Completed On', 'Revision 1 Date', 
         'Reason for Revision', 'On time or not?', 'Revision Count',
-        'Revision Penalty', 'Calculated Score', 'Attachments'
+        'Revision Penalty', 'Calculated Score', 'Attachments', 'Dependent On Task ID'
       ]);
       Logger.log('✓ Created MASTER sheet for Task Management');
     }
@@ -291,7 +291,7 @@ function ensureSheetsExist() {
         'DEPARTMENT', 'TASK FREQUENCY', 'PLANNED DATE', 'Task Status',
         'completed on', 'Task Completed On', 'Revision 1 Date', 
         'Reason for Revision', 'On time or not?', 'Revision Count',
-        'Revision Penalty', 'Calculated Score', 'Attachments'
+        'Revision Penalty', 'Calculated Score', 'Attachments', 'Dependent On Task ID'
       ]);
       Logger.log('✓ Created SCORING sheet for Task Management');
     }
@@ -378,6 +378,9 @@ function doPost(e) {
       case 'updateTaskStatus':
         result = updateTaskStatus(params.rowIndex, params.status, params.username);
         break;
+      case 'updateFMSStepPlannedDate':
+        result = updateFMSStepPlannedDate(params.projectId, params.stepNo, params.plannedDate);
+        break;
       case 'submitProgressWithAttachments':
         result = submitProgressWithAttachments(params);
         break;
@@ -397,6 +400,9 @@ function doPost(e) {
         break;
       case 'updateTask':
         result = updateTask(params.taskId, params.taskAction, params.extraData || {});
+        break;
+      case 'updateDependentTaskPlannedDate':
+        result = updateDependentTaskPlannedDate(params.taskId, params.plannedDate);
         break;
       case 'batchUpdateTasks':
         result = batchUpdateTasks(params.updates);
@@ -1152,58 +1158,91 @@ function createProject(params) {
       return { success: false, message: 'No steps found for this FMS' };
     }
     
-    let currentDate = new Date(projectStartDate);
-    const whenDays = steps[0].whenDays || Math.floor(steps[0].when);
-    const whenHours = steps[0].whenHours || Math.round((steps[0].when % 1) * 24);
+    // Create ALL steps at once (not just the first step)
+    // Step 1: Always has a calculated planned date
+    // Step 2+: Depends on whenType
+    //   - fixed: Calculate planned date based on project start + cumulative duration
+    //   - dependent: Status='Awaiting Date', Planned_Due_Date='Pending to be planned'
     
-    currentDate.setDate(currentDate.getDate() + parseInt(whenDays));
-    currentDate.setHours(currentDate.getHours() + parseInt(whenHours));
+    let cumulativeDate = new Date(projectStartDate);
     
-    // WHO needs to be stringified if it's an array (was parsed from FMS_MASTER)
-    let whoForProgress = steps[0].who;
-    Logger.log('DEBUG: steps[0].who before processing: ' + steps[0].who + ' (type: ' + typeof steps[0].who + ', isArray: ' + Array.isArray(steps[0].who) + ')');
+    Logger.log('Creating ' + steps.length + ' steps for project ' + projectId);
     
-    if (Array.isArray(whoForProgress)) {
-      whoForProgress = JSON.stringify(whoForProgress);
-      Logger.log('✓ Creating first step with WHO (array, stringified): ' + whoForProgress + ' (type after stringify: ' + typeof whoForProgress + ')');
-    } else {
-      Logger.log('✓ Creating first step with WHO (single user): ' + whoForProgress + ' (type: ' + typeof whoForProgress + ')');
+    for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+      const step = steps[stepIndex];
+      const isFirstStep = stepIndex === 0;
+      let plannedDueDate = '';
+      let status = 'Pending';
+      
+      if (isFirstStep) {
+        // First step always has a calculated date
+        const whenDays = step.whenDays || Math.floor(step.when);
+        const whenHours = step.whenHours || Math.round((step.when % 1) * 24);
+        cumulativeDate.setDate(cumulativeDate.getDate() + parseInt(whenDays));
+        cumulativeDate.setHours(cumulativeDate.getHours() + parseInt(whenHours));
+        plannedDueDate = cumulativeDate.toISOString();
+        status = 'Pending';
+        Logger.log('Step ' + step.stepNo + ': Fixed, Planned Date: ' + plannedDueDate);
+      } else {
+        // For subsequent steps, check if dependent or fixed
+        const whenType = step.whenType || 'fixed';
+        
+        if (whenType === 'dependent') {
+          // Dependent step: No planned date yet, status is "Awaiting Date"
+          plannedDueDate = 'Pending to be planned';
+          status = 'Awaiting Date';
+          Logger.log('Step ' + step.stepNo + ': Dependent, awaiting date from previous step completion');
+        } else {
+          // Fixed step: Calculate based on cumulative date
+          const whenDays = step.whenDays || Math.floor(step.when);
+          const whenHours = step.whenHours || Math.round((step.when % 1) * 24);
+          cumulativeDate.setDate(cumulativeDate.getDate() + parseInt(whenDays));
+          cumulativeDate.setHours(cumulativeDate.getHours() + parseInt(whenHours));
+          plannedDueDate = cumulativeDate.toISOString();
+          status = 'Pending';
+          Logger.log('Step ' + step.stepNo + ': Fixed, Planned Date: ' + plannedDueDate);
+        }
+      }
+      
+      // WHO needs to be stringified if it's an array
+      let whoForProgress = step.who;
+      if (Array.isArray(whoForProgress)) {
+        whoForProgress = JSON.stringify(whoForProgress);
+        Logger.log('✓ Step ' + step.stepNo + ' WHO (array, stringified): ' + whoForProgress);
+      } else {
+        Logger.log('✓ Step ' + step.stepNo + ' WHO (single user): ' + whoForProgress);
+      }
+      
+      // Build the row data array
+      const rowData = [
+        projectId,                                    // 0: Project_ID
+        fmsId,                                        // 1: FMS_ID
+        projectName,                                  // 2: Project_Name
+        step.stepNo,                                  // 3: Step_No
+        step.what,                                    // 4: WHAT
+        whoForProgress,                               // 5: WHO (string or JSON array)
+        step.how,                                     // 6: HOW
+        plannedDueDate,                               // 7: Planned_Due_Date (can be ISO date or 'Pending to be planned')
+        '',                                           // 8: Actual_Completed_On
+        status,                                       // 9: Status (Pending or Awaiting Date)
+        '',                                           // 10: Completed_By
+        isFirstStep ? 'true' : 'false',               // 11: Is_First_Step
+        username,                                     // 12: Created_By
+        timestamp,                                    // 13: Created_On
+        username,                                     // 14: Last_Updated_By
+        timestamp,                                    // 15: Last_Updated_On
+        step.requiresChecklist || false,              // 16: Requires_Checklist
+        JSON.stringify(step.checklistItems || []),    // 17: Checklist_Items
+        JSON.stringify(step.attachments || []),       // 18: Attachments
+        step.triggersFMSId || '',                     // 19: Triggers_FMS_ID
+        step.whenType || 'fixed',                     // 20: When_Type
+        ''                                            // 21: Completed_By_Users
+      ];
+      
+      progressSheet.appendRow(rowData);
     }
     
-    // Build the row data array and log it
-    const rowData = [
-      projectId,                                    // 0: Project_ID
-      fmsId,                                        // 1: FMS_ID
-      projectName,                                  // 2: Project_Name
-      steps[0].stepNo,                              // 3: Step_No
-      steps[0].what,                                // 4: WHAT
-      whoForProgress,                               // 5: WHO (string or JSON array)
-      steps[0].how,                                 // 6: HOW
-      currentDate.toISOString(),                    // 7: Planned_Due_Date
-      '',                                           // 8: Actual_Completed_On
-      'Pending',                                    // 9: Status
-      '',                                           // 10: Completed_By
-      'true',                                       // 11: Is_First_Step
-      username,                                     // 12: Created_By
-      timestamp,                                    // 13: Created_On
-      username,                                     // 14: Last_Updated_By
-      timestamp,                                    // 15: Last_Updated_On
-      steps[0].requiresChecklist || false,          // 16: Requires_Checklist
-      JSON.stringify(steps[0].checklistItems || []),// 17: Checklist_Items
-      JSON.stringify(steps[0].attachments || []),   // 18: Attachments
-      steps[0].triggersFMSId || '',                 // 19: Triggers_FMS_ID
-      steps[0].whenType || 'fixed',                 // 20: When_Type
-      ''                                            // 21: Completed_By_Users
-    ];
-    
-    Logger.log('DEBUG: Row data being written to FMS_PROGRESS:');
-    Logger.log('  - WHO (index 5): ' + rowData[5] + ' (type: ' + typeof rowData[5] + ')');
-    
-    // For Progress sheet, include checklist items with 'completed' field
-    // Columns: Project_ID, FMS_ID, Project_Name, Step_No, WHAT, WHO, HOW, Planned_Due_Date,
-    // Actual_Completed_On, Status, Completed_By, Is_First_Step, Created_By, Created_On,
-    // Last_Updated_By, Last_Updated_On, Requires_Checklist, Checklist_Items, Attachments, Triggers_FMS_ID, When_Type, Completed_By_Users
-    progressSheet.appendRow(rowData);
+    Logger.log('✅ Created all ' + steps.length + ' steps for project ' + projectId);
     
     return {
       success: true,
@@ -1843,110 +1882,65 @@ function updateTaskStatus(rowIndex, status, username) {
         }
       }
       
-      // Get next step from FMS_MASTER
-      const masterSheet = FMS_SS.getSheetByName('FMS_MASTER');
-      if (masterSheet) {
-        const masterData = masterSheet.getDataRange().getValues();
-        const allSteps = [];
-        
-        for (let i = 1; i < masterData.length; i++) {
-          const row = masterData[i];
-          if (row[0] === fmsId) {
-            // Parse checklist and attachments for next step
-            let nextChecklistItems = [];
-            let nextAttachments = [];
-            
-            try {
-              if (row[15]) {
-                nextChecklistItems = JSON.parse(row[15]);
-                // Initialize 'completed' field for next step
-                nextChecklistItems = nextChecklistItems.map(item => ({
-                  id: item.id,
-                  text: item.text,
-                  completed: false // Initialize as not completed
-                }));
-              }
-            } catch (e) {
-              // Ignore
-            }
-            
-            try {
-              if (row[16]) nextAttachments = JSON.parse(row[16]);
-            } catch (e) {
-              // Ignore
-            }
-            
-            // Parse WHO from master sheet
-            let nextWho = row[4];
-            try {
-              if (typeof nextWho === 'string' && nextWho.trim().startsWith('[')) {
-                nextWho = JSON.parse(nextWho);
-              }
-            } catch (e) {
-              // Keep as string if parsing fails
-            }
-            
-            allSteps.push({
-              stepNo: row[2],
-              what: row[3],
-              who: nextWho,
-              how: row[5],
-              when: row[6],
-              whenDays: row[8] || Math.floor(row[6]),
-              whenHours: row[9] || Math.round((row[6] % 1) * 24),
-              requiresChecklist: row[14] || false,
-              checklistItems: nextChecklistItems,
-              attachments: nextAttachments,
-              triggersFMSId: row[17] || '',  // Column 17: Triggers_FMS_ID
-              whenType: row[18] || 'fixed'   // Column 18: When_Type
-            });
-          }
-        }
-        
-        allSteps.sort((a, b) => a.stepNo - b.stepNo);
-        
-        const nextStep = allSteps.find(s => s.stepNo === currentStepNo + 1);
-        
-        if (nextStep) {
-          const completionDate = new Date(timestamp);
-          completionDate.setDate(completionDate.getDate() + parseInt(nextStep.whenDays));
-          completionDate.setHours(completionDate.getHours() + parseInt(nextStep.whenHours));
+      // Check for next step in FMS_PROGRESS (all steps created at project start)
+      const progressData = progressSheet.getDataRange().getValues();
+      let nextStepRowIndex = -1;
+      let nextStepInfo = null;
+      
+      // Find the next step in progress sheet
+      for (let i = 1; i < progressData.length; i++) {
+        const row = progressData[i];
+        if (row[0] === projectId && row[3] === currentStepNo + 1) {
+          nextStepRowIndex = i + 1;  // Sheet row index (1-based)
+          const nextStepStatus = row[9];
+          const nextStepWhenType = row[20];
+          const nextStepPlannedDate = row[7];
           
-          // WHO needs to be stringified if it's an array (was parsed from FMS_MASTER)
-          let nextWhoForProgress = nextStep.who;
-          if (Array.isArray(nextWhoForProgress)) {
-            nextWhoForProgress = JSON.stringify(nextWhoForProgress);
-            Logger.log('Creating next step with WHO (array, stringified): ' + nextWhoForProgress);
-          } else {
-            Logger.log('Creating next step with WHO (single user): ' + nextWhoForProgress);
+          // Parse WHO for display
+          let nextStepWho = row[5];
+          try {
+            if (typeof nextStepWho === 'string' && nextStepWho.trim().startsWith('[')) {
+              nextStepWho = JSON.parse(nextStepWho);
+            }
+          } catch (e) {
+            // Keep as string
           }
+          const nextStepWhoDisplay = Array.isArray(nextStepWho) ? nextStepWho.join(', ') : nextStepWho;
           
-          // For Progress sheet, include checklist items with 'completed' field
-          progressSheet.appendRow([
-            projectId,
-            fmsId,
-            currentRow[2], // projectName
-            nextStep.stepNo,
-            nextStep.what,
-            nextWhoForProgress,  // WHO properly stringified
-            nextStep.how,
-            completionDate.toISOString(),
-            '',
-            'Pending',
-            '',
-            'false',
-            username,
-            timestamp,
-            username,
-            timestamp,
-            nextStep.requiresChecklist || false,
-            JSON.stringify(nextStep.checklistItems || []),
-            JSON.stringify(nextStep.attachments || []),
-            nextStep.triggersFMSId || '',  // Triggers_FMS_ID
-            nextStep.whenType || 'fixed',  // When_Type
-            ''  // Completed_By_Users
-          ]);
+          nextStepInfo = {
+            rowIndex: nextStepRowIndex,
+            stepNo: row[3],
+            what: row[4],
+            who: nextStepWhoDisplay,
+            status: nextStepStatus,
+            whenType: nextStepWhenType,
+            plannedDate: nextStepPlannedDate,
+            projectId: projectId,
+            projectName: projectName,
+            isDependent: nextStepWhenType === 'dependent' && nextStepStatus === 'Awaiting Date'
+          };
+          
+          Logger.log('Found next step ' + nextStepInfo.stepNo + ': Status=' + nextStepStatus + ', WhenType=' + nextStepWhenType + ', PlannedDate=' + nextStepPlannedDate);
+          break;
         }
+      }
+      
+      // Handle next step based on its type
+      if (nextStepInfo && nextStepInfo.isDependent) {
+        // Dependent step: Return info to prompt for planned date
+        Logger.log('Next step is dependent - prompting for planned date');
+        return {
+          success: true,
+          message: 'Task completed successfully',
+          dependentStep: {
+            projectId: nextStepInfo.projectId,
+            projectName: nextStepInfo.projectName,
+            stepNo: nextStepInfo.stepNo,
+            what: nextStepInfo.what,
+            who: nextStepInfo.who,
+            rowIndex: nextStepInfo.rowIndex
+          }
+        };
       }
     }
     
@@ -1958,6 +1952,49 @@ function updateTaskStatus(rowIndex, status, username) {
   } catch (error) {
     Logger.log('Error updating task status: ' + error.toString());
     return { success: false, message: 'Error updating task status: ' + error.toString() };
+  }
+}
+
+/**
+ * Update planned date for a dependent FMS step
+ */
+function updateFMSStepPlannedDate(projectId, stepNo, plannedDate) {
+  try {
+    const progressSheet = FMS_SS.getSheetByName('FMS_PROGRESS');
+    if (!progressSheet) {
+      return { success: false, message: 'FMS_PROGRESS sheet not found' };
+    }
+    
+    const data = progressSheet.getDataRange().getValues();
+    let rowIndex = -1;
+    
+    // Find the step in progress sheet
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (row[0] === projectId && row[3] === stepNo) {
+        rowIndex = i + 1;  // Sheet row index (1-based)
+        break;
+      }
+    }
+    
+    if (rowIndex === -1) {
+      return { success: false, message: 'Step not found in progress' };
+    }
+    
+    // Update the planned date and status
+    const plannedDateISO = new Date(plannedDate).toISOString();
+    progressSheet.getRange(rowIndex, 8).setValue(plannedDateISO);  // Column 8: Planned_Due_Date (index 7)
+    progressSheet.getRange(rowIndex, 10).setValue('Pending');       // Column 10: Status (change from Awaiting Date to Pending)
+    
+    Logger.log('Updated step ' + stepNo + ' of project ' + projectId + ' with planned date: ' + plannedDateISO);
+    
+    return { 
+      success: true, 
+      message: 'Planned date updated successfully'
+    };
+  } catch (error) {
+    Logger.log('updateFMSStepPlannedDate error: ' + error.toString());
+    return { success: false, message: error.toString() };
   }
 }
 
@@ -2046,7 +2083,8 @@ function assignTask(taskData) {
       0,                                             // 16. Revision Count
       '',                                            // 17. Revision Penalty
       '',                                            // 18. Calculated Score
-      JSON.stringify(taskData.attachments || [])     // 19. Attachments
+      JSON.stringify(taskData.attachments || []),    // 19. Attachments
+      taskData.dependentOnTaskId || ''               // 20. Dependent On Task ID
     ];
     
     sheet.appendRow(newRow);
@@ -2301,7 +2339,36 @@ function updateTask(taskId, action, extraData) {
         sheet.getRange(rowIndex, onTimeCol).setValue(onTimeStatus);
       }
       
-      return { success: true, message: 'Task marked as completed' };
+      // Check for dependent tasks (tasks that depend on this one)
+      const dependentOnCol = headers.indexOf('Dependent On Task ID') + 1;
+      const dependentTasks = [];
+      
+      if (dependentOnCol > 0) {
+        for (let i = 1; i < data.length; i++) {
+          const dependentOnValue = (data[i][dependentOnCol - 1] || '').toString().trim();
+          if (dependentOnValue === taskId.toString()) {
+            // Found a task that depends on the current task
+            const dependentTaskId = data[i][0].toString();
+            const dependentTaskDescription = data[i][4] ? data[i][4].toString() : '';
+            const dependentTaskAssignedTo = data[i][2] ? data[i][2].toString() : '';
+            const dependentTaskStatus = data[i][statusCol - 1] ? data[i][statusCol - 1].toString() : '';
+            
+            dependentTasks.push({
+              taskId: dependentTaskId,
+              description: dependentTaskDescription,
+              assignedTo: dependentTaskAssignedTo,
+              status: dependentTaskStatus,
+              needsPlannedDate: !data[i][plannedDateCol - 1] || data[i][plannedDateCol - 1].toString().trim() === ''
+            });
+          }
+        }
+      }
+      
+      return { 
+        success: true, 
+        message: 'Task marked as completed',
+        dependentTasks: dependentTasks.length > 0 ? dependentTasks : undefined
+      };
     }
     
     if (action === 'revise') {
@@ -2321,6 +2388,46 @@ function updateTask(taskId, action, extraData) {
     return { success: false, message: 'Invalid action' };
   } catch (error) {
     Logger.log('updateTask error: ' + error.toString());
+    return { success: false, message: error.toString() };
+  }
+}
+
+/**
+ * Update planned date for a dependent task
+ */
+function updateDependentTaskPlannedDate(taskId, plannedDate) {
+  try {
+    const sheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('MASTER');
+    if (!sheet) {
+      Logger.log('ERROR: MASTER sheet not found');
+      return { success: false, message: 'MASTER sheet not found' };
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0].map(h => (h || '').toString().trim());
+    
+    let rowIndex = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0].toString() === taskId.toString()) {
+        rowIndex = i + 1;
+        break;
+      }
+    }
+    
+    if (rowIndex === -1) {
+      return { success: false, message: 'Task not found' };
+    }
+    
+    const plannedDateCol = headers.indexOf('PLANNED DATE') + 1;
+    if (plannedDateCol > 0) {
+      const formattedDate = formatDateForSheet(new Date(plannedDate));
+      sheet.getRange(rowIndex, plannedDateCol).setValue(formattedDate);
+      return { success: true, message: 'Planned date updated successfully' };
+    }
+    
+    return { success: false, message: 'PLANNED DATE column not found' };
+  } catch (error) {
+    Logger.log('updateDependentTaskPlannedDate error: ' + error.toString());
     return { success: false, message: error.toString() };
   }
 }

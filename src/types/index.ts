@@ -124,7 +124,25 @@ export interface TaskData {
   'Reason for Revision'?: string;
   'On time or not?'?: string;
   'Attachments'?: Attachment[] | string; // Can be array or JSON string
+  'Dependent On Task ID'?: string; // Task that this task depends on
   [key: string]: any;
+}
+
+export interface DependentTask {
+  taskId: string;
+  description: string;
+  assignedTo: string;
+  status: string;
+  needsPlannedDate: boolean;
+}
+
+export interface DependentFMSStep {
+  projectId: string;
+  projectName: string;
+  stepNo: number;
+  what: string;
+  who: string;
+  rowIndex: number;
 }
 
 export interface TaskSummary {

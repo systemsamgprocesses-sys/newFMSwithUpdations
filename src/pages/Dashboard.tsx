@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useAlert } from '../context/AlertContext';
 import { api } from '../services/api';
-import { ProjectTask, TaskData, TaskUser, ScoringData } from '../types';
+import { ProjectTask, TaskData, TaskUser, ScoringData, DependentFMSStep } from '../types';
 import { SkeletonDashboard } from '../components/SkeletonLoader';
 import DriveFileUpload, { DriveFileUploadHandle } from '../components/DriveFileUpload';
 
@@ -134,6 +134,11 @@ export default function Dashboard() {
     endDate: ''
   });
   const [loadingScoring, setLoadingScoring] = useState(false);
+  
+  // Dependent FMS step modal
+  const [showDependentStepModal, setShowDependentStepModal] = useState(false);
+  const [dependentStep, setDependentStep] = useState<DependentFMSStep | null>(null);
+  const [dependentStepPlannedDate, setDependentStepPlannedDate] = useState('');
 
   useEffect(() => {
     if (user?.username) {
@@ -713,6 +718,17 @@ export default function Dashboard() {
         
         const result = await api.updateTaskStatus(fmsTask.rowIndex, 'Done', user!.username);
         if (result.success) {
+          // Check if there's a dependent step that needs a planned date
+          if (result.dependentStep) {
+            setDependentStep(result.dependentStep);
+            setDependentStepPlannedDate('');
+            setShowChecklistModal(false);
+            setTaskToComplete(null);
+            setShowDependentStepModal(true);
+            setUpdating(null);
+            return;
+          }
+          
           showSuccess('Task completed successfully!');
           // Reload FMS tasks to get updated data
           await loadMyTasks(user!.username);
@@ -748,6 +764,34 @@ export default function Dashboard() {
         item.id === itemId ? { ...item, completed: !item.completed } : item
       )
     );
+  };
+
+  const handleDependentStepSubmit = async () => {
+    if (!dependentStep || !dependentStepPlannedDate) return;
+    
+    setUpdating('dependent-step');
+    try {
+      const result = await api.updateFMSStepPlannedDate(
+        dependentStep.projectId,
+        dependentStep.stepNo,
+        dependentStepPlannedDate
+      );
+      
+      if (result.success) {
+        showSuccess('Task completed and dependent step date updated successfully!');
+        setShowDependentStepModal(false);
+        setDependentStep(null);
+        setDependentStepPlannedDate('');
+        // Reload tasks to show updated data
+        await loadMyTasks(user!.username);
+      } else {
+        showError(result.message || 'Failed to update dependent step date');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Failed to update dependent step date');
+    } finally {
+      setUpdating(null);
+    }
   };
 
   const allChecklistItemsCompleted = () => {
@@ -2865,6 +2909,97 @@ export default function Dashboard() {
                 className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dependent FMS Step Modal - Set Planned Date */}
+      {showDependentStepModal && dependentStep && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-slate-900">
+                Set Planned Date for Dependent Step
+              </h3>
+              <button
+                onClick={() => {
+                  setShowDependentStepModal(false);
+                  setDependentStep(null);
+                  setDependentStepPlannedDate('');
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Task completed successfully!</strong> The next step depends on the completion of this step. 
+                Please provide a planned date for the next step:
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div className="border border-slate-200 rounded-lg p-4">
+                <div className="mb-3">
+                  <p className="text-sm text-slate-600 mb-1">
+                    <strong>Project:</strong> {dependentStep.projectName}
+                  </p>
+                  <p className="text-sm text-slate-600 mb-1">
+                    <strong>Step {dependentStep.stepNo}:</strong> {dependentStep.what}
+                  </p>
+                  <p className="text-sm text-slate-600 mb-3">
+                    <strong>Assigned To:</strong> {dependentStep.who}
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <Calendar className="w-4 h-4 inline mr-1" />
+                    Planned Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={dependentStepPlannedDate}
+                    onChange={(e) => setDependentStepPlannedDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    required
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDependentStepModal(false);
+                  setDependentStep(null);
+                  setDependentStepPlannedDate('');
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDependentStepSubmit}
+                disabled={!dependentStepPlannedDate || updating === 'dependent-step'}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {updating === 'dependent-step' ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Submit Date
+                  </>
+                )}
               </button>
             </div>
           </div>

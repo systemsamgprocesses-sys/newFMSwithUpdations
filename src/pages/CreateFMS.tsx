@@ -430,7 +430,6 @@ graph LR
                       onChange={(e) => updateStep(index, 'how', e.target.value)}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all outline-none"
                       placeholder="How will it be done?"
-                      required
                     />
                   </div>
 
