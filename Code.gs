@@ -1114,11 +1114,17 @@ function createProject(params) {
         
         // Parse WHO - can be string or JSON array
         let whoValue = row[4];
+        Logger.log('DEBUG: Raw WHO from FMS_MASTER row[4]: ' + whoValue + ' (type: ' + typeof whoValue + ')');
+        
         try {
           if (typeof whoValue === 'string' && whoValue.startsWith('[')) {
             whoValue = JSON.parse(whoValue);
+            Logger.log('DEBUG: Parsed WHO from JSON string to array: ' + JSON.stringify(whoValue));
+          } else {
+            Logger.log('DEBUG: WHO is single user (not JSON array): ' + whoValue);
           }
         } catch (e) {
+          Logger.log('DEBUG: Failed to parse WHO, keeping as-is: ' + e.toString());
           // Keep as string if parsing fails
         }
         
@@ -1153,15 +1159,19 @@ function createProject(params) {
     currentDate.setDate(currentDate.getDate() + parseInt(whenDays));
     currentDate.setHours(currentDate.getHours() + parseInt(whenHours));
     
-    // WHO is already properly formatted from FMS_MASTER (either single user or JSON array string)
-    const whoForProgress = steps[0].who;
-    Logger.log('Creating first step with WHO: ' + whoForProgress);
+    // WHO needs to be stringified if it's an array (was parsed from FMS_MASTER)
+    let whoForProgress = steps[0].who;
+    Logger.log('DEBUG: steps[0].who before processing: ' + steps[0].who + ' (type: ' + typeof steps[0].who + ', isArray: ' + Array.isArray(steps[0].who) + ')');
     
-    // For Progress sheet, include checklist items with 'completed' field
-    // Columns: Project_ID, FMS_ID, Project_Name, Step_No, WHAT, WHO, HOW, Planned_Due_Date,
-    // Actual_Completed_On, Status, Completed_By, Is_First_Step, Created_By, Created_On,
-    // Last_Updated_By, Last_Updated_On, Requires_Checklist, Checklist_Items, Attachments, Triggers_FMS_ID, When_Type, Completed_By_Users
-    progressSheet.appendRow([
+    if (Array.isArray(whoForProgress)) {
+      whoForProgress = JSON.stringify(whoForProgress);
+      Logger.log('✓ Creating first step with WHO (array, stringified): ' + whoForProgress + ' (type after stringify: ' + typeof whoForProgress + ')');
+    } else {
+      Logger.log('✓ Creating first step with WHO (single user): ' + whoForProgress + ' (type: ' + typeof whoForProgress + ')');
+    }
+    
+    // Build the row data array and log it
+    const rowData = [
       projectId,                                    // 0: Project_ID
       fmsId,                                        // 1: FMS_ID
       projectName,                                  // 2: Project_Name
@@ -1183,8 +1193,17 @@ function createProject(params) {
       JSON.stringify(steps[0].attachments || []),   // 18: Attachments
       steps[0].triggersFMSId || '',                 // 19: Triggers_FMS_ID
       steps[0].whenType || 'fixed',                 // 20: When_Type
-      ''                                            // 21: Completed_By_Users (JSON object tracking multi-WHO completions)
-    ]);
+      ''                                            // 21: Completed_By_Users
+    ];
+    
+    Logger.log('DEBUG: Row data being written to FMS_PROGRESS:');
+    Logger.log('  - WHO (index 5): ' + rowData[5] + ' (type: ' + typeof rowData[5] + ')');
+    
+    // For Progress sheet, include checklist items with 'completed' field
+    // Columns: Project_ID, FMS_ID, Project_Name, Step_No, WHAT, WHO, HOW, Planned_Due_Date,
+    // Actual_Completed_On, Status, Completed_By, Is_First_Step, Created_By, Created_On,
+    // Last_Updated_By, Last_Updated_On, Requires_Checklist, Checklist_Items, Attachments, Triggers_FMS_ID, When_Type, Completed_By_Users
+    progressSheet.appendRow(rowData);
     
     return {
       success: true,
@@ -1286,6 +1305,16 @@ function getAllProjects() {
         whoArray = [whoValue];
       }
       
+      // Parse completionsByUser for multi-WHO tasks (column 21)
+      let completionsByUser = {};
+      try {
+        if (row[21] && row[21].trim() !== '') {
+          completionsByUser = JSON.parse(row[21]);
+        }
+      } catch (e) {
+        Logger.log('Error parsing completionsByUser in getAllProjects: ' + e.toString());
+      }
+      
       projectMap[projectId].tasks.push({
         rowIndex: i + 1,
         stepNo: row[3],
@@ -1301,7 +1330,8 @@ function getAllProjects() {
         projectName: row[2],
         requiresChecklist: row[16] === 'TRUE' || row[16] === true || row[16] === 'true', // Requires_Checklist is column 16
         checklistItems: checklistItems,
-        attachments: attachments
+        attachments: attachments,
+        completionsByUser: Object.keys(completionsByUser).length > 0 ? completionsByUser : undefined
       });
     }
     
@@ -1388,6 +1418,16 @@ function getProjectsByUser(username) {
           Logger.log('Error parsing attachments from progress: ' + e.toString());
         }
         
+        // Parse completionsByUser for multi-WHO tasks (column 21)
+        let completionsByUser = {};
+        try {
+          if (row[21] && row[21].trim() !== '') {
+            completionsByUser = JSON.parse(row[21]);
+          }
+        } catch (e) {
+          Logger.log('Error parsing completionsByUser: ' + e.toString());
+        }
+        
         tasks.push({
           rowIndex: i + 1,
           projectId: row[0],
@@ -1403,7 +1443,8 @@ function getProjectsByUser(username) {
           isFirstStep: row[11] === 'true' || row[11] === true,
           requiresChecklist: row[16] === 'TRUE' || row[16] === true || row[16] === 'true', // Requires_Checklist is column 16
           checklistItems: checklistItems,
-          attachments: attachments
+          attachments: attachments,
+          completionsByUser: Object.keys(completionsByUser).length > 0 ? completionsByUser : undefined
         });
       }
     }
@@ -1673,6 +1714,7 @@ function getAllLogs() {
 
 /**
  * Update task status in FMS_PROGRESS sheet
+ * Handles multi-WHO tasks by tracking individual completions
  */
 function updateTaskStatus(rowIndex, status, username) {
   try {
@@ -1689,12 +1731,88 @@ function updateTaskStatus(rowIndex, status, username) {
     
     const timestamp = new Date().toISOString();
     
-    // Update the task status and completion info
-    progressSheet.getRange(validRowIndex, 9).setValue(status === 'Done' ? timestamp : ''); // Actual_Completed_On
-    progressSheet.getRange(validRowIndex, 10).setValue(status); // Status
-    progressSheet.getRange(validRowIndex, 11).setValue(status === 'Done' ? username : ''); // Completed_By
-    progressSheet.getRange(validRowIndex, 15).setValue(username); // Last_Updated_By
-    progressSheet.getRange(validRowIndex, 16).setValue(timestamp); // Last_Updated_On
+    // Get current row data to check WHO field
+    const currentRow = progressSheet.getRange(validRowIndex, 1, 1, 22).getValues()[0];
+    const whoValue = currentRow[5]; // WHO column (index 5)
+    const existingCompletedByUsers = currentRow[21]; // Completed_By_Users column (index 21)
+    
+    // Parse WHO field to determine if this is a multi-WHO task
+    let whoArray = [];
+    let isMultiWho = false;
+    
+    try {
+      if (typeof whoValue === 'string' && whoValue.trim().startsWith('[')) {
+        whoArray = JSON.parse(whoValue);
+        isMultiWho = whoArray.length > 1;
+      } else {
+        whoArray = [whoValue];
+        isMultiWho = false;
+      }
+    } catch (e) {
+      Logger.log('Error parsing WHO field in updateTaskStatus: ' + e.toString());
+      whoArray = [whoValue];
+      isMultiWho = false;
+    }
+    
+    Logger.log('Updating task. WHO: ' + JSON.stringify(whoArray) + ', Is Multi-WHO: ' + isMultiWho + ', User: ' + username);
+    
+    // Handle multi-WHO task completion
+    if (isMultiWho && status === 'Done') {
+      // Parse existing completions
+      let completionsByUser = {};
+      try {
+        if (existingCompletedByUsers && existingCompletedByUsers.trim() !== '') {
+          completionsByUser = JSON.parse(existingCompletedByUsers);
+        } else {
+          // Initialize with all users set to null
+          whoArray.forEach(user => {
+            completionsByUser[user] = null;
+          });
+        }
+      } catch (e) {
+        Logger.log('Error parsing existing completions, initializing: ' + e.toString());
+        whoArray.forEach(user => {
+          completionsByUser[user] = null;
+        });
+      }
+      
+      // Mark this user as completed
+      completionsByUser[username] = timestamp;
+      Logger.log('Updated completions: ' + JSON.stringify(completionsByUser));
+      
+      // Check if all users have completed
+      const allCompleted = whoArray.every(user => completionsByUser[user] !== null);
+      
+      if (allCompleted) {
+        // All users completed - mark task as Done
+        Logger.log('✓ All users completed! Marking task as Done.');
+        progressSheet.getRange(validRowIndex, 9).setValue(timestamp); // Actual_Completed_On
+        progressSheet.getRange(validRowIndex, 10).setValue('Done'); // Status
+        progressSheet.getRange(validRowIndex, 11).setValue(JSON.stringify(whoArray)); // Completed_By (all users)
+        progressSheet.getRange(validRowIndex, 22).setValue(JSON.stringify(completionsByUser)); // Completed_By_Users
+        status = 'Done'; // Ensure status is Done for next step creation
+      } else {
+        // Not all users completed yet - keep as In Progress
+        const completedCount = whoArray.filter(user => completionsByUser[user] !== null).length;
+        Logger.log('⏳ Partial completion: ' + completedCount + '/' + whoArray.length + ' users completed.');
+        progressSheet.getRange(validRowIndex, 9).setValue(''); // Actual_Completed_On (empty until all complete)
+        progressSheet.getRange(validRowIndex, 10).setValue('In Progress'); // Status
+        progressSheet.getRange(validRowIndex, 11).setValue(''); // Completed_By (empty until all complete)
+        progressSheet.getRange(validRowIndex, 22).setValue(JSON.stringify(completionsByUser)); // Completed_By_Users
+        status = 'In Progress'; // Override status to prevent next step creation
+      }
+      
+      progressSheet.getRange(validRowIndex, 15).setValue(username); // Last_Updated_By
+      progressSheet.getRange(validRowIndex, 16).setValue(timestamp); // Last_Updated_On
+      
+    } else {
+      // Single-WHO task or status change other than Done - existing behavior
+      progressSheet.getRange(validRowIndex, 9).setValue(status === 'Done' ? timestamp : ''); // Actual_Completed_On
+      progressSheet.getRange(validRowIndex, 10).setValue(status); // Status
+      progressSheet.getRange(validRowIndex, 11).setValue(status === 'Done' ? username : ''); // Completed_By
+      progressSheet.getRange(validRowIndex, 15).setValue(username); // Last_Updated_By
+      progressSheet.getRange(validRowIndex, 16).setValue(timestamp); // Last_Updated_On
+    }
     
     // If task is completed, create next step and check for FMS triggers
     if (status === 'Done') {
@@ -1794,9 +1912,14 @@ function updateTaskStatus(rowIndex, status, username) {
           completionDate.setDate(completionDate.getDate() + parseInt(nextStep.whenDays));
           completionDate.setHours(completionDate.getHours() + parseInt(nextStep.whenHours));
           
-          // WHO is already properly formatted from FMS_MASTER (parsed and used as-is)
-          const nextWhoForProgress = nextStep.who;
-          Logger.log('Creating next step with WHO: ' + nextWhoForProgress);
+          // WHO needs to be stringified if it's an array (was parsed from FMS_MASTER)
+          let nextWhoForProgress = nextStep.who;
+          if (Array.isArray(nextWhoForProgress)) {
+            nextWhoForProgress = JSON.stringify(nextWhoForProgress);
+            Logger.log('Creating next step with WHO (array, stringified): ' + nextWhoForProgress);
+          } else {
+            Logger.log('Creating next step with WHO (single user): ' + nextWhoForProgress);
+          }
           
           // For Progress sheet, include checklist items with 'completed' field
           progressSheet.appendRow([

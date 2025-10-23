@@ -670,6 +670,15 @@ export default function Dashboard() {
     // Check if task requires checklist
     const fmsTask = task.type === 'FMS' ? (task.source as ProjectTask) : null;
     
+    // Check if this is a multi-WHO task and user has already completed it
+    if (fmsTask && Array.isArray(task.assignee) && task.assignee.length > 1) {
+      const completionsByUser = fmsTask.completionsByUser || {};
+      if (completionsByUser[user!.username]) {
+        showError('You have already completed your part of this task. Waiting for other assignees to complete.');
+        return;
+      }
+    }
+    
     // Debug logging
     console.log('🔍 Completing task:', task);
     console.log('🔍 Is FMS task?', task.type === 'FMS');
@@ -1842,6 +1851,47 @@ export default function Dashboard() {
                           {Array.isArray(task.assignee) ? task.assignee.join(', ') : task.assignee}
                         </p>
                       )}
+                      
+                      {/* Multi-WHO completion status */}
+                      {Array.isArray(task.assignee) && task.assignee.length > 1 && task.type === 'FMS' && (
+                        (() => {
+                          const fmsTask = task.source as ProjectTask;
+                          const completionsByUser = fmsTask.completionsByUser || {};
+                          const completedUsers = task.assignee.filter((userId: string) => completionsByUser[userId]);
+                          const pendingUsers = task.assignee.filter((userId: string) => !completionsByUser[userId]);
+                          
+                          return (
+                            <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded">
+                              <div className="flex items-center gap-1 mb-1">
+                                <Target className="w-3 h-3 text-amber-600" />
+                                <span className="text-xs font-medium text-amber-900">
+                                  Completion Status: {completedUsers.length}/{task.assignee.length}
+                                </span>
+                              </div>
+                              {completedUsers.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-1">
+                                  {completedUsers.map((userId: string) => (
+                                    <span key={userId} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
+                                      <CheckCircle className="w-3 h-3" />
+                                      {userId}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {pendingUsers.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {pendingUsers.map((userId: string) => (
+                                    <span key={userId} className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-xs">
+                                      <AlertCircle className="w-3 h-3" />
+                                      {userId} (pending)
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
 
                     {/* Show checklist items if any */}
@@ -1896,28 +1946,50 @@ export default function Dashboard() {
                     {(task.status !== 'Done' && task.status.toLowerCase() !== 'completed') && (
                       <div className="flex flex-wrap gap-2 mt-4">
                         {(activeTab !== 'iAssigned' && activeTab !== 'allTasks') ? (
-                          <>
-                            <button
-                              onClick={() => handleCompleteTask(task)}
-                              disabled={updating === task.id}
-                              className="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl text-sm font-semibold hover:from-green-600 hover:to-emerald-700 hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md"
-                            >
-                              {updating === task.id ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                              Complete
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedTaskForObjection(task);
-                                setObjectionReason('');
-                                setShowObjectionModal(true);
-                              }}
-                              disabled={updating === task.id}
-                              className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl text-sm font-semibold hover:from-red-600 hover:to-rose-700 hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md"
-                            >
-                              <AlertCircle className="w-4 h-4" />
-                              Objection
-                            </button>
-                          </>
+                          (() => {
+                            // Check if user has already completed their part in multi-WHO task
+                            const fmsTask = task.type === 'FMS' ? (task.source as ProjectTask) : null;
+                            const hasAlreadyCompleted = fmsTask && 
+                              Array.isArray(task.assignee) && 
+                              task.assignee.length > 1 &&
+                              fmsTask.completionsByUser?.[user!.username];
+                            
+                            if (hasAlreadyCompleted) {
+                              return (
+                                <div className="w-full text-center py-2 px-3 bg-green-50 border border-green-200 rounded-lg">
+                                  <div className="flex items-center justify-center gap-2 text-sm text-green-700 font-medium">
+                                    <CheckCircle className="w-4 h-4" />
+                                    You have completed your part. Waiting for others.
+                                  </div>
+                                </div>
+                              );
+                            }
+                            
+                            return (
+                              <>
+                                <button
+                                  onClick={() => handleCompleteTask(task)}
+                                  disabled={updating === task.id}
+                                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl text-sm font-semibold hover:from-green-600 hover:to-emerald-700 hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md"
+                                >
+                                  {updating === task.id ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                                  Complete
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedTaskForObjection(task);
+                                    setObjectionReason('');
+                                    setShowObjectionModal(true);
+                                  }}
+                                  disabled={updating === task.id}
+                                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl text-sm font-semibold hover:from-red-600 hover:to-rose-700 hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md"
+                                >
+                                  <AlertCircle className="w-4 h-4" />
+                                  Objection
+                                </button>
+                              </>
+                            );
+                          })()
                         ) : (
                           <div className="w-full text-center py-2 text-sm text-slate-500 italic">
                             View only - You assigned this task
@@ -2027,37 +2099,74 @@ export default function Dashboard() {
                       </td>
                       {(activeTab === 'iAssigned' || activeTab === 'allTasks') && (
                         <td className="px-2 sm:px-3 md:px-4 py-3 text-sm text-slate-700 font-medium">
-                          {Array.isArray(task.assignee) ? task.assignee.join(', ') : task.assignee}
+                          <div>
+                            {Array.isArray(task.assignee) ? task.assignee.join(', ') : task.assignee}
+                            
+                            {/* Multi-WHO completion status in table */}
+                            {Array.isArray(task.assignee) && task.assignee.length > 1 && task.type === 'FMS' && (
+                              (() => {
+                                const fmsTask = task.source as ProjectTask;
+                                const completionsByUser = fmsTask.completionsByUser || {};
+                                const completedCount = task.assignee.filter((userId: string) => completionsByUser[userId]).length;
+                                
+                                return (
+                                  <div className="mt-1 text-xs">
+                                    <span className={`px-2 py-0.5 rounded-full ${completedCount === task.assignee.length ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                      {completedCount}/{task.assignee.length} completed
+                                    </span>
+                                  </div>
+                                );
+                              })()
+                            )}
+                          </div>
                         </td>
                       )}
                       <td className="px-2 sm:px-3 md:px-4 py-3">
                         {(task.status !== 'Done' && task.status.toLowerCase() !== 'completed') && (
                           <div className="flex flex-wrap gap-2">
-                            {(activeTab !== 'iAssigned' && activeTab !== 'allTasks') && (
-                              <>
-                                <button
-                                  onClick={() => handleCompleteTask(task)}
-                                  disabled={updating === task.id}
-                                  className="px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg text-sm font-semibold hover:from-green-600 hover:to-emerald-700 hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
-                                >
-                                  {updating === task.id ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                                  Complete
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setSelectedTaskForObjection(task);
-                                    setObjectionReason('');
-                                    setShowObjectionModal(true);
-                                  }}
-                                  disabled={updating === task.id}
-                                  className="px-3 py-2 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-lg text-sm font-semibold hover:from-red-600 hover:to-rose-700 hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
-                                  title="Raise Objection"
-                                >
-                                  <AlertCircle className="w-4 h-4" />
-                                  Objection
-                                </button>
-                              </>
-                            )}
+                            {(activeTab !== 'iAssigned' && activeTab !== 'allTasks') && (() => {
+                              // Check if user has already completed their part in multi-WHO task
+                              const fmsTask = task.type === 'FMS' ? (task.source as ProjectTask) : null;
+                              const hasAlreadyCompleted = fmsTask && 
+                                Array.isArray(task.assignee) && 
+                                task.assignee.length > 1 &&
+                                fmsTask.completionsByUser?.[user!.username];
+                              
+                              if (hasAlreadyCompleted) {
+                                return (
+                                  <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3" />
+                                    Completed
+                                  </span>
+                                );
+                              }
+                              
+                              return (
+                                <>
+                                  <button
+                                    onClick={() => handleCompleteTask(task)}
+                                    disabled={updating === task.id}
+                                    className="px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg text-sm font-semibold hover:from-green-600 hover:to-emerald-700 hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
+                                  >
+                                    {updating === task.id ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                                    Complete
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedTaskForObjection(task);
+                                      setObjectionReason('');
+                                      setShowObjectionModal(true);
+                                    }}
+                                    disabled={updating === task.id}
+                                    className="px-3 py-2 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-lg text-sm font-semibold hover:from-red-600 hover:to-rose-700 hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
+                                    title="Raise Objection"
+                                  >
+                                    <AlertCircle className="w-4 h-4" />
+                                    Objection
+                                  </button>
+                                </>
+                              );
+                            })()}
                             {(activeTab === 'iAssigned' || activeTab === 'allTasks') && (
                               <span className="text-sm text-slate-500 italic">View only</span>
                             )}
