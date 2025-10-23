@@ -15,12 +15,13 @@ export interface Attachment {
 export interface FMSStep {
   stepNo: number;
   what: string;
-  who: string;
+  who: string | string[]; // Can be single user or multiple users
   how: string;
   when: number;
   whenUnit: 'days' | 'hours' | 'days+hours';
   whenDays?: number;
   whenHours?: number;
+  whenType?: 'fixed' | 'dependent'; // Fixed duration or dependent on previous step (default 'fixed' for step 1)
   requiresChecklist?: boolean;
   checklistItems?: ChecklistItem[];
   attachments?: Attachment[];
@@ -49,18 +50,20 @@ export interface ProjectTask {
   projectName: string;
   stepNo: number;
   what: string;
-  who: string;
+  who: string | string[]; // Can be single user or multiple users
   how: string;
   plannedDueDate: string;
   actualCompletedOn: string;
-  status: 'Pending' | 'In Progress' | 'Done';
-  completedBy?: string;
+  status: 'Pending' | 'In Progress' | 'Done' | 'Awaiting Date'; // Added 'Awaiting Date' for dependent steps
+  completedBy?: string | string[]; // Track who completed (for multi-WHO steps)
+  completionsByUser?: {[userId: string]: string}; // Track completion date per user for multi-WHO
   isFirstStep?: boolean;
   isOverdue?: boolean;
   completionStatus?: 'on-time' | 'late';
   requiresChecklist?: boolean;
   checklistItems?: ChecklistItem[];
   attachments?: Attachment[];
+  whenType?: 'fixed' | 'dependent';
 }
 
 export interface Project {

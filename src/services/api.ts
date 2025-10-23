@@ -157,7 +157,14 @@ export const api = {
   async createFMS(fmsName: string, steps: FMSStep[], username: string) {
     cache.invalidatePattern('getAllFMS');
     cache.invalidatePattern('getAllLogs');
-    return callAppsScript('createFMS', { fmsName, steps, username });
+    
+    // Pre-stringify WHO arrays to prevent Java object conversion issues in Apps Script
+    const processedSteps = steps.map(step => ({
+      ...step,
+      who: Array.isArray(step.who) ? JSON.stringify(step.who) : step.who
+    }));
+    
+    return callAppsScript('createFMS', { fmsName, steps: processedSteps, username });
   },
 
   async getAllFMS(username?: string, userRole?: string, userDepartment?: string) {

@@ -145,10 +145,14 @@ export default function StartProject() {
             {selectedFMS && (
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 sm:p-4">
                 <h3 className="font-semibold text-slate-900 mb-2 text-sm sm:text-base">Note:</h3>
-                <p className="text-xs sm:text-sm text-slate-600">
-                  The first step will be created immediately and assigned to the responsible person.
+                <p className="text-xs sm:text-sm text-slate-600 mb-2">
+                  The first step will be created immediately and assigned to the responsible person(s).
                   Subsequent steps will appear on their assigned person's dashboard only after the
                   previous step is completed.
+                </p>
+                <p className="text-xs sm:text-sm text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+                  ⏳ <strong>Timing-Dependent Steps:</strong> For steps with timing dependent on previous step completion,
+                  you'll be prompted to set the planned date when the previous step is completed.
                 </p>
               </div>
             )}

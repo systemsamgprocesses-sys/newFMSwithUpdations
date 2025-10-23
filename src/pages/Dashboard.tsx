@@ -17,7 +17,7 @@ interface UnifiedTask {
   description: string;
   dueDate: string;
   status: string;
-  assignee: string;
+  assignee: string | string[]; // Can be single user or array of users
   projectName?: string;
   department?: string;
   isOverdue: boolean;
@@ -351,7 +351,7 @@ export default function Dashboard() {
             projectName: task.projectName,
             isOverdue: task.status !== 'Done' && dueDate < now,
             source: task,
-            createdBy: createdBy
+            createdBy: Array.isArray(createdBy) ? createdBy[0] : createdBy
           });
         } catch (error) {
           console.error('Error processing FMS task:', error, task);
@@ -494,7 +494,7 @@ export default function Dashboard() {
                 projectName: project.projectName,
                 isOverdue: task.status !== 'Done' && dueDate < now,
                 source: task,
-                createdBy: project.tasks[0]?.who || 'Unknown'
+                createdBy: Array.isArray(project.tasks[0]?.who) ? project.tasks[0]?.who[0] : (project.tasks[0]?.who || 'Unknown')
               });
             } catch (error) {
               console.error('Error processing all FMS task:', error, task);
@@ -579,7 +579,7 @@ export default function Dashboard() {
         t.description?.toLowerCase().includes(query) ||
         t.projectName?.toLowerCase().includes(query) ||
         t.department?.toLowerCase().includes(query) ||
-        t.assignee?.toLowerCase().includes(query)
+        (Array.isArray(t.assignee) ? t.assignee.some(a => a.toLowerCase().includes(query)) : t.assignee?.toLowerCase().includes(query))
       );
     }
     
@@ -1034,7 +1034,7 @@ export default function Dashboard() {
             {[
               { label: 'Total Tasks', value: Math.max(0, totalTasks), subtitle: 'All assigned', color: 'slate', delay: 0.1 },
               { label: 'FMS Tasks', value: fmsTaskCount, subtitle: 'All assigned', color: 'purple', delay: 0.15 },
-              { label: 'Delegated Tasks', value: tmTaskCount, subtitle: 'All assigned', color: 'cyan', delay: 0.2 },
+              { label: 'One Time Tasks', value: tmTaskCount, subtitle: 'All assigned', color: 'cyan', delay: 0.2 },
               { label: 'Completed', value: completedTasks, subtitle: '', color: 'green', delay: 0.25 },
               { label: 'Due Tasks', value: dueTasks, subtitle: '', color: 'yellow', delay: 0.3 },
               { label: 'Completion', value: `${completionRate}%`, subtitle: '', color: 'blue', delay: 0.35 },
@@ -1123,14 +1123,14 @@ export default function Dashboard() {
             <div className="flex gap-2 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent pb-2">
               {[
                 { id: 'assignedToMe', icon: ListChecks, label: 'Assigned To Me', count: allUnifiedTasks.length },
-                { id: 'iAssigned', icon: Send, label: 'Tasks I Assigned', count: tasksIAssigned.length },
+                { id: 'iAssigned', icon: Send, label: 'Tasks Assigned By Me', count: tasksIAssigned.length },
                 ...(user?.role?.toLowerCase() === 'superadmin' || user?.role?.toLowerCase() === 'super admin' 
                   ? [{ id: 'allTasks', icon: Target, label: 'All Tasks', count: allTasksForAdmin.length }]
                   : []
                 ),
-                { id: 'due', icon: AlertCircle, label: 'Due till Today', count: dueTasks },
+                { id: 'due', icon: AlertCircle, label: 'All Tasks due till Today', count: dueTasks },
                 { id: 'fms', icon: Target, label: 'FMS Projects', count: fmsTaskCount },
-                { id: 'tm', icon: CheckSquare, label: 'Delegated Tasks', count: tmTaskCount },
+                { id: 'tm', icon: CheckSquare, label: 'One Time Tasks', count: tmTaskCount },
                 { id: 'objections', icon: AlertCircle, label: 'Objections', count: objections.length },
                 { id: 'assign', icon: Plus, label: 'Assign Task', count: null },
                 { id: 'performance', icon: BarChart3, label: 'Performance', count: null },
@@ -1255,7 +1255,7 @@ export default function Dashboard() {
                 >
                   <option value="all">All Types</option>
                   <option value="FMS">FMS Projects</option>
-                  <option value="TASK_MANAGEMENT">Delegated Tasks</option>
+                  <option value="TASK_MANAGEMENT">One Time Tasks</option>
                 </select>
                 
                 <input
@@ -1838,7 +1838,8 @@ export default function Dashboard() {
                       )}
                       {(activeTab === 'iAssigned' || activeTab === 'allTasks') && (
                         <p className="text-xs text-slate-700 font-semibold">
-                          <span className="font-medium text-slate-500">Assignee:</span> {task.assignee}
+                          <span className="font-medium text-slate-500">Assignee:</span>{' '}
+                          {Array.isArray(task.assignee) ? task.assignee.join(', ') : task.assignee}
                         </p>
                       )}
                     </div>
@@ -2026,7 +2027,7 @@ export default function Dashboard() {
                       </td>
                       {(activeTab === 'iAssigned' || activeTab === 'allTasks') && (
                         <td className="px-2 sm:px-3 md:px-4 py-3 text-sm text-slate-700 font-medium">
-                          {task.assignee}
+                          {Array.isArray(task.assignee) ? task.assignee.join(', ') : task.assignee}
                         </td>
                       )}
                       <td className="px-2 sm:px-3 md:px-4 py-3">

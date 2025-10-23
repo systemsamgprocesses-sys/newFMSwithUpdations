@@ -20,12 +20,13 @@ export default function CreateFMS() {
     { 
       stepNo: 1, 
       what: '', 
-      who: '', 
+      who: [], 
       how: '', 
       when: 0, 
       whenUnit: 'days', 
       whenDays: 0, 
       whenHours: 0,
+      whenType: 'fixed', // Step 1 always fixed
       requiresChecklist: false,
       checklistItems: []
     },
@@ -78,9 +79,15 @@ export default function CreateFMS() {
     const mermaidCode = `
 graph LR
     Start([Start])
-    ${steps.map((step, idx) => `
-    Step${idx + 1}["Step ${step.stepNo}<br/>WHAT: ${step.what}<br/>WHO: ${step.who}<br/>HOW: ${step.how}<br/>WHEN: ${step.whenUnit === 'days' ? `${step.whenDays} days` : step.whenUnit === 'hours' ? `${step.whenHours} hours` : `${step.whenDays}d ${step.whenHours}h`}"]
-    `).join('\n')}
+    ${steps.map((step, idx) => {
+      const whoDisplay = Array.isArray(step.who) ? step.who.join(', ') : step.who;
+      const whenDisplay = step.whenType === 'dependent' 
+        ? 'Dependent on prev' 
+        : (step.whenUnit === 'days' ? `${step.whenDays} days` : step.whenUnit === 'hours' ? `${step.whenHours} hours` : `${step.whenDays}d ${step.whenHours}h`);
+      return `
+    Step${idx + 1}["Step ${step.stepNo}<br/>WHAT: ${step.what}<br/>WHO: ${whoDisplay}<br/>HOW: ${step.how}<br/>WHEN: ${whenDisplay}"]
+    `;
+    }).join('\n')}
     End([End])
 
     Start --> Step1
@@ -109,12 +116,13 @@ graph LR
     newSteps.splice(insertIndex, 0, {
       stepNo: insertIndex + 1,
       what: '',
-      who: '',
+      who: [],
       how: '',
       when: 0,
       whenUnit: 'days',
       whenDays: 0,
       whenHours: 0,
+      whenType: insertIndex === 0 ? 'fixed' : 'dependent', // Default to dependent for step 2+
       requiresChecklist: false,
       checklistItems: []
     });
@@ -122,7 +130,8 @@ graph LR
     // Update step numbers for all steps
     const updatedSteps = newSteps.map((step, index) => ({
       ...step,
-      stepNo: index + 1
+      stepNo: index + 1,
+      whenType: index === 0 ? 'fixed' : (step.whenType || 'dependent')
     }));
     
     setSteps(updatedSteps);
@@ -196,7 +205,9 @@ graph LR
     }
 
     const hasEmptyFields = steps.some(
-      step => !step.what.trim() || !step.who.trim() || !step.how.trim()
+      step => !step.what.trim() || 
+              (Array.isArray(step.who) ? step.who.length === 0 : !step.who.trim()) || 
+              !step.how.trim()
     );
 
     if (hasEmptyFields) {
@@ -214,6 +225,22 @@ graph LR
     if (hasEmptyChecklists) {
       showError('Please add at least one checklist item for steps that require checklists');
       return;
+    }
+
+    // Validate: A step cannot be dependent if previous step has multiple WHOs
+    for (let i = 1; i < steps.length; i++) {
+      const currentStep = steps[i];
+      const previousStep = steps[i - 1];
+      
+      if (currentStep.whenType === 'dependent') {
+        const previousWho = previousStep.who;
+        const hasMultiplePreviousWho = Array.isArray(previousWho) && previousWho.length > 1;
+        
+        if (hasMultiplePreviousWho) {
+          showError(`Step ${i + 1} cannot be dependent on the previous step because Step ${i} has multiple assignees. When multiple people complete a step, it's unclear when to set the next step's planned date. Please use "Fixed Duration" instead.`);
+          return;
+        }
+      }
     }
 
     setLoading(true);
@@ -345,21 +372,52 @@ graph LR
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                      WHO (Responsible Person)
+                      WHO (Responsible Person/People) - Can select multiple
                     </label>
                     <select
-                      value={step.who}
-                      onChange={(e) => updateStep(index, 'who', e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all outline-none"
+                      multiple
+                      value={Array.isArray(step.who) ? step.who : [step.who].filter(Boolean)}
+                      onChange={(e) => {
+                        const selected = Array.from(e.target.selectedOptions, option => option.value);
+                        updateStep(index, 'who', selected);
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all outline-none min-h-[100px]"
                       required
                     >
-                      <option value="">Select User</option>
                       {users.map((user) => (
                         <option key={user.username} value={user.username}>
                           {user.name} ({user.username})
                         </option>
                       ))}
                     </select>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Hold Ctrl/Cmd to select multiple users. Task will be marked complete only when ALL assigned users complete it.
+                    </p>
+                    {Array.isArray(step.who) && step.who.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {step.who.map((userId: string) => {
+                          const user = users.find(u => u.username === userId);
+                          return (
+                            <span
+                              key={userId}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs"
+                            >
+                              {user ? `${user.name} (${userId})` : userId}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newWho = (step.who as string[]).filter((id: string) => id !== userId);
+                                  updateStep(index, 'who', newWho);
+                                }}
+                                className="hover:bg-blue-200 rounded-full p-0.5"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -376,10 +434,66 @@ graph LR
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      WHEN (Duration)
-                    </label>
+                  {/* When Type Selector - Only for Step 2 onwards */}
+                  {index > 0 && (() => {
+                    const previousStep = steps[index - 1];
+                    const hasPreviousMultipleWho = Array.isArray(previousStep.who) && previousStep.who.length > 1;
+                    const isDependentDisabled = hasPreviousMultipleWho;
+
+                    return (
+                      <div className="md:col-span-2 space-y-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Timing Type
+                        </label>
+                        {isDependentDisabled && (
+                          <p className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200 mb-2">
+                            ⚠️ The previous step has multiple assignees. "Dependent" timing is disabled because it would be unclear when to set this step's planned date. Please use "Fixed Duration".
+                          </p>
+                        )}
+                        <div className="flex gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`whenType-${index}`}
+                              value="fixed"
+                              checked={step.whenType === 'fixed'}
+                              onChange={() => updateStep(index, 'whenType', 'fixed')}
+                              className="w-4 h-4 text-blue-600"
+                            />
+                            <span className="text-sm text-slate-700">Fixed Duration</span>
+                          </label>
+                          <label className={`flex items-center gap-2 ${isDependentDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                            <input
+                              type="radio"
+                              name={`whenType-${index}`}
+                              value="dependent"
+                              checked={step.whenType === 'dependent'}
+                              onChange={() => {
+                                if (!isDependentDisabled) {
+                                  updateStep(index, 'whenType', 'dependent');
+                                }
+                              }}
+                              disabled={isDependentDisabled}
+                              className="w-4 h-4 text-blue-600 disabled:cursor-not-allowed"
+                            />
+                            <span className="text-sm text-slate-700">Dependent on Previous Step</span>
+                          </label>
+                        </div>
+                        {step.whenType === 'dependent' && !isDependentDisabled && (
+                          <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200 mt-2">
+                            ⏳ This step's planned date will be set when the previous step is completed.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Only show duration inputs if it's step 1 OR if it's a fixed duration step */}
+                  {(index === 0 || step.whenType === 'fixed') && (
+                    <div className={`space-y-2 ${index > 0 ? 'md:col-span-2' : ''}`}>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        WHEN (Duration)
+                      </label>
                     <select
                       value={step.whenUnit}
                       onChange={(e) => updateStep(index, 'whenUnit', e.target.value)}
@@ -438,7 +552,8 @@ graph LR
                         />
                       </div>
                     )}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Attachment Option - REAL FILE UPLOAD */}
@@ -487,6 +602,11 @@ graph LR
 
                   {step.requiresChecklist && (
                     <div className="mt-3 space-y-2">
+                      {Array.isArray(step.who) && step.who.length > 1 && (
+                        <p className="text-xs text-blue-700 bg-blue-100 p-2 rounded border border-blue-300">
+                          ℹ️ This step has <strong>{step.who.length} assignees</strong>. All assignees must individually complete this checklist for the step to be marked as done.
+                        </p>
+                      )}
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-medium text-blue-800">Checklist Items:</span>
                         <button
