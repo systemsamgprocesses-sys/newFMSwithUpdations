@@ -36,7 +36,7 @@
 
 // ===== CONFIGURATION =====
 // Replace these IDs with your actual Google Sheets IDs
-const MASTER_SHEET_ID = '1SGVw2xbVoLPmggNJKgpjWIaEgzukU8byE2nQLqfeGTo';
+const MASTER_SHEET_ID = '1ipCXOWo1A8w3sbmhaQcrhFHaCPgaHaHWR6Wr-MPDZ14';
 const CREDENTIALS_SHEET_ID = '1ipCXOWo1A8w3sbmhaQcrhFHaCPgaHaHWR6Wr-MPDZ14';
 
 // Get the active spreadsheet for FMS data
@@ -394,6 +394,9 @@ function doPost(e) {
         break;
       case 'getTasks':
         result = getTasks(params.userId, params.filter || 'all');
+        break;
+      case 'getTasksAssignedBy':
+        result = getTasksAssignedBy(params.userId, params.filter || 'all');
         break;
       case 'getTaskSummary':
         result = getTaskSummary(params.userId);
@@ -2247,6 +2250,81 @@ function getTasks(userId, filter) {
 }
 
 /**
+ * Get all tasks assigned BY a user (where user is the creator/giver)
+ */
+function getTasksAssignedBy(userId, filter) {
+  try {
+    Logger.log('getTasksAssignedBy called with userId: ' + userId + ', filter: ' + filter);
+    const sheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName('MASTER');
+    if (!sheet) {
+      Logger.log('ERROR: MASTER sheet not found. Please run initializeAllSheets() function.');
+      return { success: false, message: 'MASTER sheet not found. Please contact administrator.', tasks: [] };
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    Logger.log('Total rows in MASTER sheet: ' + data.length);
+    if (data.length <= 1) return { success: true, tasks: [] };
+    
+    const headers = data[0].map(h => (h || '').toString().trim());
+    Logger.log('Headers: ' + JSON.stringify(headers));
+    
+    // Debug: Log first few rows of data
+    Logger.log('First 5 rows of data:');
+    for (let i = 0; i < Math.min(5, data.length); i++) {
+      Logger.log('Row ' + i + ': ' + JSON.stringify(data[i]));
+    }
+    const tasks = [];
+    
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const givenByUserId = (row[headers.indexOf('GIVEN BY')] || '').toString().trim();
+      Logger.log('Row ' + i + ' GIVEN BY: "' + givenByUserId + '", Looking for: "' + userId + '"');
+      Logger.log('Comparison: "' + givenByUserId.toLowerCase() + '" !== "' + userId.toLowerCase() + '" = ' + (givenByUserId.toLowerCase() !== userId.toLowerCase()));
+      if (givenByUserId.toLowerCase() !== userId.toLowerCase()) continue;
+      
+      Logger.log('Found matching task for user: ' + userId);
+      
+      const task = {};
+      headers.forEach((header, idx) => {
+        let value = row[idx];
+        if (header === 'PLANNED DATE' || header === 'completed on') {
+          const parsed = parseDMYDate(value);
+          task[header] = parsed ? formatDateToISO(parsed) : '';
+        } else if (header.toLowerCase() === 'attachments') {
+          // Parse attachments JSON string
+          try {
+            task[header] = value ? JSON.parse(value) : [];
+          } catch (e) {
+            task[header] = [];
+          }
+        } else {
+          task[header] = (value || '').toString();
+        }
+      });
+      
+      task['Task Status'] = task['Task Status'] || '';
+      task['PLANNED DATE'] = task['PLANNED DATE'] || '';
+      task['Task Completed On'] = task['completed on'] || '';
+      
+      const status = task['Task Status'].toLowerCase();
+      const matchesFilter =
+        filter === 'all' ||
+        (filter === 'pending' && (status === 'pending' || status === '')) ||
+        (filter === 'completed' && status === 'completed') ||
+        (filter === 'revisions' && (status === 'revise' || status === 'revision'));
+      
+      if (matchesFilter) tasks.push(task);
+    }
+    
+    Logger.log('Total tasks found for user ' + userId + ': ' + tasks.length);
+    return { success: true, tasks: tasks };
+  } catch (error) {
+    Logger.log('getTasksAssignedBy error: ' + error.toString());
+    return { success: false, message: error.toString(), tasks: [] };
+  }
+}
+
+/**
  * Get task summary counts for dashboard
  */
 function getTaskSummary(userId) {
@@ -3318,12 +3396,19 @@ function reviewObjection(params) {
         }
       }
       
+    } else if (action === 'approve') {
+      newStatus = 'Approved';
+      actionTaken = 'Objection approved: ' + (params.reason || 'No reason provided');
+      
+      // For approve action, we don't change the task status, just approve the objection
+      // The task continues as normal
+      
     } else {
       // Invalid reviewAction
       Logger.log('ERROR: Invalid reviewAction received: "' + action + '"');
       return { 
         success: false, 
-        message: 'Invalid reviewAction: "' + action + '". Valid actions are: terminate, replace, reject, hold' 
+        message: 'Invalid reviewAction: "' + action + '". Valid actions are: terminate, replace, reject, hold, approve' 
       };
     }
     

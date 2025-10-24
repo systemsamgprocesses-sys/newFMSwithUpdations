@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckSquare, Loader, Calendar, ListChecks, AlertCircle, TrendingUp, Target, X, Paperclip, ExternalLink, CheckCircle, Plus, Send, BarChart3 } from 'lucide-react';
+import { CheckSquare, Loader, Calendar, ListChecks, AlertCircle, TrendingUp, Target, X, Paperclip, ExternalLink, CheckCircle, Plus, Send, BarChart3, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -55,6 +55,7 @@ export default function Dashboard() {
 
   // Task Management state
   const [tmTasks, setTmTasks] = useState<TaskData[]>([]);
+  const [tmTasksAssignedBy, setTmTasksAssignedBy] = useState<TaskData[]>([]);
   const [tmLoading, setTmLoading] = useState(false);
   
   // All users' tasks for Super Admin
@@ -67,7 +68,7 @@ export default function Dashboard() {
   const [objectionsLoading, setObjectionsLoading] = useState(false);
 
   // Unified state
-  const [activeTab, setActiveTab] = useState<'assignedToMe' | 'iAssigned' | 'allTasks' | 'fms' | 'tm' | 'due' | 'objections' | 'assign' | 'performance'>('assignedToMe');
+  const [activeTab, setActiveTab] = useState<'assignedToMe' | 'iAssignedToMe' | 'iAssignedToOthers' | 'allTasks' | 'fms' | 'tm' | 'due' | 'objections' | 'assign' | 'performance'>('assignedToMe');
   const [objectionSubTab, setObjectionSubTab] = useState<'all' | 'raised' | 'review' | 'tagged'>('all');
   
   // Pagination state
@@ -102,12 +103,16 @@ export default function Dashboard() {
   // Hold options modal
   const [showHoldModal, setShowHoldModal] = useState(false);
   const [selectedObjectionForHold, setSelectedObjectionForHold] = useState<any>(null);
-  const [holdAction, setHoldAction] = useState<'terminate' | 'replace' | 'hold' | 'reject'>('terminate');
+  const [holdAction, setHoldAction] = useState<'terminate' | 'replace' | 'hold' | 'reject' | 'approve'>('terminate');
   const [holdData, setHoldData] = useState({
     newAssignee: '',
     newDueDate: '',
     reason: ''
   });
+  
+  // Two-step objection review
+  const [objectionReviewStep, setObjectionReviewStep] = useState<'initial' | 'detailed'>('initial');
+  const [selectedDetailedAction, setSelectedDetailedAction] = useState<'terminate' | 'replace' | 'hold'>('terminate');
 
   // Objection modal
   const [showObjectionModal, setShowObjectionModal] = useState(false);
@@ -147,6 +152,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (user?.username) {
+      console.log('🚀 Dashboard useEffect triggered');
+      console.log('👤 User object:', user);
+      console.log('📝 Username:', user.username);
+      console.log('🔑 Role:', user.role);
+      
       loadMyTasks(user.username);
       loadTaskManagementData();
       loadObjections();
@@ -234,9 +244,38 @@ export default function Dashboard() {
     
     setTmLoading(true);
     try {
+      // Load tasks assigned TO the user (for "Assigned To Me" tab)
       const tasksResult = await api.getTasks(user.username, 'all');
       if (tasksResult.success) {
         setTmTasks(tasksResult.tasks || []);
+      }
+      
+      // Load tasks assigned BY the user (for "Tasks I Assigned" tab)
+      console.log('🔍 Loading tasks assigned by user:', user.username);
+      console.log('Username type:', typeof user.username);
+      console.log('Username length:', user.username?.length);
+      console.log('Username trimmed:', user.username?.trim());
+      
+      try {
+        const tasksAssignedByResult = await api.getTasksAssignedBy(user.username, 'all');
+        console.log('📋 Tasks assigned by result:', tasksAssignedByResult);
+        
+        if (tasksAssignedByResult.success) {
+          console.log('✅ Success! Tasks found:', tasksAssignedByResult.tasks?.length);
+          console.log('📊 Tasks assigned by data:', tasksAssignedByResult.tasks);
+          
+          if (tasksAssignedByResult.tasks && tasksAssignedByResult.tasks.length > 0) {
+            console.log('🎯 First task sample:', tasksAssignedByResult.tasks[0]);
+          }
+          
+          setTmTasksAssignedBy(tasksAssignedByResult.tasks || []);
+        } else {
+          console.error('❌ Failed to load tasks assigned by user:', tasksAssignedByResult.message);
+          setTmTasksAssignedBy([]);
+        }
+      } catch (error) {
+        console.error('💥 Error calling getTasksAssignedBy API:', error);
+        setTmTasksAssignedBy([]);
       }
       
       // Load task users for objection modal
@@ -490,50 +529,28 @@ export default function Dashboard() {
     return unified.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   }, [fmsTasks, tmTasks, allProjects]);
 
-  // Tasks I assigned (where I'm the creator)
-  const tasksIAssigned = useMemo(() => {
+  // Tasks I assigned to myself (where I'm the creator and assignee)
+  const tasksIAssignedToMe = useMemo(() => {
+    console.log('🔍 Calculating tasksIAssignedToMe...');
+    console.log('tmTasksAssignedBy:', tmTasksAssignedBy?.length || 0, tmTasksAssignedBy);
+    console.log('allProjects:', allProjects?.length || 0);
+    console.log('user?.username:', user?.username);
+    
     const unified: UnifiedTask[] = [];
     
-    // Get all tasks from FMS projects where current user is creator
-    if (allProjects && allProjects.length > 0) {
-      allProjects.forEach(project => {
-        if (project.tasks && project.tasks.length > 0) {
-          project.tasks.forEach(task => {
-            try {
-              const dueDate = new Date(task.plannedDueDate);
-              const now = new Date();
-              now.setHours(0, 0, 0, 0);
-              dueDate.setHours(0, 0, 0, 0);
-              
-              // Only include if current user is the creator
-              if (task.who && project.tasks[0]?.who === user?.username) {
-                unified.push({
-                  id: `fms-assigned-${task.stepNo || Math.random()}`,
-                  type: 'FMS',
-                  title: task.what,
-                  description: task.how || '',
-                  dueDate: task.plannedDueDate,
-                  status: task.status,
-                  assignee: task.who,
-                  projectName: project.projectName,
-                  isOverdue: task.status !== 'Done' && dueDate < now,
-                  source: task,
-                  createdBy: project.tasks[0]?.who || user?.username
-                });
-              }
-            } catch (error) {
-              console.error('Error processing FMS project task:', error, task);
-            }
-          });
-        }
-      });
-    }
-    
-    // Get all TM tasks where current user is the giver
-    if (tmTasks && tmTasks.length > 0) {
-      tmTasks.forEach(task => {
+    // Get all TM tasks where current user is the giver AND assignee (from MASTER sheet)
+    if (tmTasksAssignedBy && tmTasksAssignedBy.length > 0) {
+      console.log('Processing TM tasks assigned by user to themselves...');
+      tmTasksAssignedBy.forEach((task, index) => {
         try {
-          if (task['GIVEN BY'] === user?.username) {
+          console.log(`Processing TM task ${index}:`, task['Task Id'], task['TASK DESCRIPTION']);
+          const assignee = task['GIVEN TO USER ID'];
+          
+          // Check if assignee matches current user (case insensitive)
+          const isAssignedToMe = assignee && assignee.toLowerCase() === user?.username?.toLowerCase();
+          
+          if (isAssignedToMe) {
+            console.log(`Task ${task['Task Id']} is assigned to me`);
             const dueDate = new Date(task['PLANNED DATE']);
             const now = new Date();
             now.setHours(0, 0, 0, 0);
@@ -541,7 +558,7 @@ export default function Dashboard() {
             const status = task['Task Status']?.toLowerCase() || '';
             
             unified.push({
-              id: `tm-assigned-${task['Task Id']}`,
+              id: `tm-assigned-to-me-${task['Task Id']}`,
               type: 'TASK_MANAGEMENT',
               title: task['TASK DESCRIPTION'],
               description: task['HOW TO DO- TUTORIAL LINKS (OPTIONAL)'] || '',
@@ -553,15 +570,204 @@ export default function Dashboard() {
               source: task,
               createdBy: task['GIVEN BY']
             });
+            console.log(`Added TM task ${index} to tasksIAssignedToMe array`);
           }
         } catch (error) {
-          console.error('Error processing TM task:', error, task);
+          console.error('Error processing TM task assigned to me:', error, task);
+        }
+      });
+    } else {
+      console.log('No TM tasks assigned by user found');
+    }
+    
+    // Also include FMS tasks where current user is the creator/assigner AND assignee
+    if (allProjects && allProjects.length > 0) {
+      console.log('Processing FMS projects for tasks assigned by user to themselves...');
+      allProjects.forEach(project => {
+        if (project.tasks && project.tasks.length > 0) {
+          // Check if the current user created this project (first task's assignee)
+          const firstTaskAssignee = Array.isArray(project.tasks[0]?.who) 
+            ? project.tasks[0]?.who[0] 
+            : project.tasks[0]?.who;
+          
+          console.log(`Project ${project.projectName}: firstTaskAssignee=${firstTaskAssignee}, user=${user?.username}`);
+          
+          if (firstTaskAssignee === user?.username) {
+            console.log(`Adding FMS project ${project.projectName} tasks to tasksIAssignedToMe`);
+            project.tasks.forEach((task, index) => {
+              try {
+                // Check if this specific task is assigned to the current user
+                const taskAssignee = Array.isArray(task.who) ? task.who[0] : task.who;
+                const isAssignedToMe = taskAssignee && taskAssignee.toLowerCase() === user?.username?.toLowerCase();
+                
+                if (isAssignedToMe) {
+                  const dueDate = new Date(task.plannedDueDate);
+                  const now = new Date();
+                  now.setHours(0, 0, 0, 0);
+                  dueDate.setHours(0, 0, 0, 0);
+                  
+                  // Find the previous step's completed by information
+                  let previousStepCompletedBy = '';
+                  if (index > 0) {
+                    const previousTask = project.tasks[index - 1];
+                    if (previousTask.status === 'Done') {
+                      if (Array.isArray(previousTask.completedBy)) {
+                        previousStepCompletedBy = previousTask.completedBy.join(', ');
+                      } else if (previousTask.completedBy) {
+                        previousStepCompletedBy = previousTask.completedBy;
+                      }
+                    }
+                  }
+                  
+                  unified.push({
+                    id: `fms-assigned-to-me-${task.stepNo || Math.random()}`,
+                    type: 'FMS',
+                    title: task.what,
+                    description: task.how || '',
+                    dueDate: task.plannedDueDate,
+                    status: task.status,
+                    assignee: task.who,
+                    projectName: project.projectName,
+                    isOverdue: task.status !== 'Done' && dueDate < now,
+                    source: task,
+                    createdBy: user?.username || 'Unknown',
+                    previousStepCompletedBy: previousStepCompletedBy || undefined
+                  });
+                }
+              } catch (error) {
+                console.error('Error processing FMS task assigned to me:', error, task);
+              }
+            });
+          }
         }
       });
     }
     
+    console.log('🎯 Final tasksIAssignedToMe count:', unified.length);
+    console.log('TM tasks:', unified.filter(t => t.type === 'TASK_MANAGEMENT').length);
+    console.log('FMS tasks:', unified.filter(t => t.type === 'FMS').length);
     return unified.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-  }, [allProjects, tmTasks, user?.username]);
+  }, [tmTasksAssignedBy, allProjects, user?.username]);
+
+  // Tasks I assigned to others (where I'm the creator but not the assignee)
+  const tasksIAssignedToOthers = useMemo(() => {
+    console.log('🔍 Calculating tasksIAssignedToOthers...');
+    console.log('tmTasksAssignedBy:', tmTasksAssignedBy?.length || 0, tmTasksAssignedBy);
+    console.log('allProjects:', allProjects?.length || 0);
+    console.log('user?.username:', user?.username);
+    
+    const unified: UnifiedTask[] = [];
+    
+    // Get all TM tasks where current user is the giver but NOT the assignee (from MASTER sheet)
+    if (tmTasksAssignedBy && tmTasksAssignedBy.length > 0) {
+      console.log('Processing TM tasks assigned by user to others...');
+      tmTasksAssignedBy.forEach((task, index) => {
+        try {
+          console.log(`Processing TM task ${index}:`, task['Task Id'], task['TASK DESCRIPTION']);
+          const assignee = task['GIVEN TO USER ID'];
+          
+          // Check if assignee does NOT match current user (case insensitive)
+          const isAssignedToOthers = assignee && assignee.toLowerCase() !== user?.username?.toLowerCase();
+          
+          if (isAssignedToOthers) {
+            console.log(`Task ${task['Task Id']} is assigned to others`);
+            const dueDate = new Date(task['PLANNED DATE']);
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+            dueDate.setHours(0, 0, 0, 0);
+            const status = task['Task Status']?.toLowerCase() || '';
+            
+            unified.push({
+              id: `tm-assigned-to-others-${task['Task Id']}`,
+              type: 'TASK_MANAGEMENT',
+              title: task['TASK DESCRIPTION'],
+              description: task['HOW TO DO- TUTORIAL LINKS (OPTIONAL)'] || '',
+              dueDate: task['PLANNED DATE'],
+              status: task['Task Status'],
+              assignee: task['GIVEN TO USER ID'],
+              department: task['DEPARTMENT'],
+              isOverdue: status !== 'completed' && dueDate < now,
+              source: task,
+              createdBy: task['GIVEN BY']
+            });
+            console.log(`Added TM task ${index} to tasksIAssignedToOthers array`);
+          }
+        } catch (error) {
+          console.error('Error processing TM task assigned to others:', error, task);
+        }
+      });
+    } else {
+      console.log('No TM tasks assigned by user found');
+    }
+    
+    // Also include FMS tasks where current user is the creator/assigner but NOT the assignee
+    if (allProjects && allProjects.length > 0) {
+      console.log('Processing FMS projects for tasks assigned by user to others...');
+      allProjects.forEach(project => {
+        if (project.tasks && project.tasks.length > 0) {
+          // Check if the current user created this project (first task's assignee)
+          const firstTaskAssignee = Array.isArray(project.tasks[0]?.who) 
+            ? project.tasks[0]?.who[0] 
+            : project.tasks[0]?.who;
+          
+          console.log(`Project ${project.projectName}: firstTaskAssignee=${firstTaskAssignee}, user=${user?.username}`);
+          
+          if (firstTaskAssignee === user?.username) {
+            console.log(`Adding FMS project ${project.projectName} tasks to tasksIAssignedToOthers`);
+            project.tasks.forEach((task, index) => {
+              try {
+                // Check if this specific task is assigned to someone other than the current user
+                const taskAssignee = Array.isArray(task.who) ? task.who[0] : task.who;
+                const isAssignedToOthers = taskAssignee && taskAssignee.toLowerCase() !== user?.username?.toLowerCase();
+                
+                if (isAssignedToOthers) {
+                  const dueDate = new Date(task.plannedDueDate);
+                  const now = new Date();
+                  now.setHours(0, 0, 0, 0);
+                  dueDate.setHours(0, 0, 0, 0);
+                  
+                  // Find the previous step's completed by information
+                  let previousStepCompletedBy = '';
+                  if (index > 0) {
+                    const previousTask = project.tasks[index - 1];
+                    if (previousTask.status === 'Done') {
+                      if (Array.isArray(previousTask.completedBy)) {
+                        previousStepCompletedBy = previousTask.completedBy.join(', ');
+                      } else if (previousTask.completedBy) {
+                        previousStepCompletedBy = previousTask.completedBy;
+                      }
+                    }
+                  }
+                  
+                  unified.push({
+                    id: `fms-assigned-to-others-${task.stepNo || Math.random()}`,
+                    type: 'FMS',
+                    title: task.what,
+                    description: task.how || '',
+                    dueDate: task.plannedDueDate,
+                    status: task.status,
+                    assignee: task.who,
+                    projectName: project.projectName,
+                    isOverdue: task.status !== 'Done' && dueDate < now,
+                    source: task,
+                    createdBy: user?.username || 'Unknown',
+                    previousStepCompletedBy: previousStepCompletedBy || undefined
+                  });
+                }
+              } catch (error) {
+                console.error('Error processing FMS task assigned to others:', error, task);
+              }
+            });
+          }
+        }
+      });
+    }
+    
+    console.log('🎯 Final tasksIAssignedToOthers count:', unified.length);
+    console.log('TM tasks:', unified.filter(t => t.type === 'TASK_MANAGEMENT').length);
+    console.log('FMS tasks:', unified.filter(t => t.type === 'FMS').length);
+    return unified.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  }, [tmTasksAssignedBy, allProjects, user?.username]);
   
   // All tasks (for super admin) - includes both FMS and Task Management tasks from all users
   const allTasksForAdmin = useMemo(() => {
@@ -618,8 +824,9 @@ export default function Dashboard() {
     }
     
     // Get all Task Management tasks from all users (for Super Admin)
-    // Only use allUsersTasks if it has data, otherwise show empty array (don't fallback to current user's tasks)
+    // Always prioritize allUsersTasks when available, don't fallback to current user's tasks
     if (allUsersTasks && allUsersTasks.length > 0) {
+      console.log(`🎯 Processing ${allUsersTasks.length} all users tasks for All Tasks section`);
       allUsersTasks.forEach(task => {
         try {
           const dueDate = new Date(task['PLANNED DATE']);
@@ -646,18 +853,12 @@ export default function Dashboard() {
         }
       });
     } else if (allUsersTasksLoading) {
-      // Still loading all users tasks - don't show anything yet
-      console.log('Still loading all users tasks...');
+      console.log('Still loading all users tasks for All Tasks section...');
     } else {
-      // Failed to load all users tasks - show error message
-      console.warn('Failed to load all users tasks for Super Admin');
-      console.log('Debug - allUsersTasks state:', { 
-        allUsersTasks: allUsersTasks?.length || 0, 
-        allUsersTasksLoading, 
-        hasData: !!(allUsersTasks && allUsersTasks.length > 0) 
-      });
+      console.log('No all users tasks available for All Tasks section');
     }
     
+    console.log(`🎯 All Tasks section total: ${unified.length} tasks (${unified.filter(t => t.type === 'FMS').length} FMS + ${unified.filter(t => t.type === 'TASK_MANAGEMENT').length} TM)`);
     return unified.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   }, [allProjects, allUsersTasks, allUsersTasksLoading, user?.role]);
 
@@ -669,8 +870,11 @@ export default function Dashboard() {
       case 'assignedToMe':
         tasks = allUnifiedTasks;
         break;
-      case 'iAssigned':
-        tasks = tasksIAssigned;
+      case 'iAssignedToMe':
+        tasks = tasksIAssignedToMe;
+        break;
+      case 'iAssignedToOthers':
+        tasks = tasksIAssignedToOthers;
         break;
       case 'allTasks':
         tasks = allTasksForAdmin;
@@ -729,7 +933,7 @@ export default function Dashboard() {
     }
     
     return tasks;
-  }, [allUnifiedTasks, tasksIAssigned, allTasksForAdmin, activeTab, searchQuery, statusFilter, typeFilter, dateRangeFilter]);
+  }, [allUnifiedTasks, tasksIAssignedToMe, tasksIAssignedToOthers, allTasksForAdmin, activeTab, searchQuery, statusFilter, typeFilter, dateRangeFilter]);
 
   // Filter tasks assigned till current date (exclude future tasks)
   const now = new Date();
@@ -955,15 +1159,34 @@ export default function Dashboard() {
   };
 
 
-  const handleHoldAction = (objection: any, action: 'terminate' | 'replace' | 'hold' | 'reject') => {
+  const handleHoldAction = (objection: any, action: 'terminate' | 'replace' | 'hold' | 'reject' | 'approve') => {
     setSelectedObjectionForHold(objection);
     setHoldAction(action);
     setHoldData({ newAssignee: '', newDueDate: '', reason: '' });
-    setShowHoldModal(true);
+    
+    if (action === 'reject') {
+      // Direct reject - no second step needed
+      setObjectionReviewStep('initial');
+      setShowHoldModal(true);
+    } else if (action === 'approve') {
+      // Approve - show detailed options
+      setObjectionReviewStep('detailed');
+      setShowHoldModal(true);
+    } else {
+      // Other actions - show detailed options
+      setObjectionReviewStep('detailed');
+      setShowHoldModal(true);
+    }
   };
 
   const executeHoldAction = async () => {
     if (!selectedObjectionForHold) return;
+
+    // If we're in detailed step with approve action, use the selected detailed action
+    let actionToExecute = holdAction;
+    if (objectionReviewStep === 'detailed' && holdAction === 'approve') {
+      actionToExecute = selectedDetailedAction;
+    }
 
     // Validate required fields
     if (!holdData.reason.trim()) {
@@ -976,21 +1199,21 @@ export default function Dashboard() {
     try {
       let result;
       
-      if (holdAction === 'reject') {
+      if (actionToExecute === 'reject') {
         result = await api.reviewObjection({
           objectionId: selectedObjectionForHold.objectionId,
           reviewAction: 'reject',
           reviewedBy: user!.username,
           reason: holdData.reason
         });
-      } else if (holdAction === 'terminate') {
+      } else if (actionToExecute === 'terminate') {
         result = await api.reviewObjection({
           objectionId: selectedObjectionForHold.objectionId,
           reviewAction: 'terminate',
           reviewedBy: user!.username,
           reason: holdData.reason
         });
-      } else if (holdAction === 'replace') {
+      } else if (actionToExecute === 'replace') {
         result = await api.reviewObjection({
           objectionId: selectedObjectionForHold.objectionId,
           reviewAction: 'replace',
@@ -999,10 +1222,17 @@ export default function Dashboard() {
           newDueDate: holdData.newDueDate || undefined,
           reason: holdData.reason
         });
-      } else if (holdAction === 'hold') {
+      } else if (actionToExecute === 'hold') {
         result = await api.reviewObjection({
           objectionId: selectedObjectionForHold.objectionId,
           reviewAction: 'hold',
+          reviewedBy: user!.username,
+          reason: holdData.reason
+        });
+      } else if (actionToExecute === 'approve') {
+        result = await api.reviewObjection({
+          objectionId: selectedObjectionForHold.objectionId,
+          reviewAction: 'approve',
           reviewedBy: user!.username,
           reason: holdData.reason
         });
@@ -1010,7 +1240,7 @@ export default function Dashboard() {
 
       if (result?.success) {
         let message = '';
-        switch (holdAction) {
+        switch (actionToExecute) {
           case 'reject':
             message = 'Objection rejected';
             break;
@@ -1023,9 +1253,13 @@ export default function Dashboard() {
           case 'hold':
             message = 'Task put on hold';
             break;
+          case 'approve':
+            message = 'Objection approved successfully';
+            break;
         }
         
         setShowHoldModal(false);
+        setObjectionReviewStep('initial');
         showSuccess(message);
         await loadObjections();
         await loadMyTasks(user!.username);
@@ -1292,7 +1526,8 @@ export default function Dashboard() {
             <div className="flex gap-2 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent pb-2">
               {[
                 { id: 'assignedToMe', icon: ListChecks, label: 'Assigned To Me', count: allUnifiedTasks.length },
-                { id: 'iAssigned', icon: Send, label: 'Tasks Assigned By Me', count: tasksIAssigned.length },
+                { id: 'iAssignedToMe', icon: User, label: 'Tasks Assigned By Me to Me', count: tasksIAssignedToMe.length },
+                { id: 'iAssignedToOthers', icon: Send, label: 'Tasks Assigned By Me to Others', count: tasksIAssignedToOthers.length },
                 ...(user?.role?.toLowerCase() === 'superadmin' || user?.role?.toLowerCase() === 'super admin' 
                   ? [{ id: 'allTasks', icon: Target, label: 'All Tasks', count: allTasksForAdmin.length }]
                   : []
@@ -1364,7 +1599,7 @@ export default function Dashboard() {
         )}
         
           {/* Search and Filter Bar - Show only for task tabs */}
-          {(activeTab === 'assignedToMe' || activeTab === 'iAssigned' || activeTab === 'allTasks' || activeTab === 'fms' || activeTab === 'tm' || activeTab === 'due') && (
+          {(activeTab === 'assignedToMe' || activeTab === 'iAssignedToMe' || activeTab === 'iAssignedToOthers' || activeTab === 'allTasks' || activeTab === 'fms' || activeTab === 'tm' || activeTab === 'due') && (
             <div className="mb-6 space-y-4">
               {/* Search Bar */}
               <div className="relative">
@@ -1664,30 +1899,16 @@ export default function Dashboard() {
                             <button
                               onClick={() => handleHoldAction(objection, 'reject')}
                               disabled={updating === objection.objectionId}
-                              className="flex-1 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors text-sm disabled:opacity-50"
+                              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm disabled:opacity-50"
                             >
                               Reject Objection
                             </button>
                             <button
-                              onClick={() => handleHoldAction(objection, 'terminate')}
-                              disabled={updating === objection.objectionId}
-                              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm disabled:opacity-50"
-                            >
-                              Terminate Task
-                            </button>
-                            <button
-                              onClick={() => handleHoldAction(objection, 'replace')}
+                              onClick={() => handleHoldAction(objection, 'approve')}
                               disabled={updating === objection.objectionId}
                               className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm disabled:opacity-50"
                             >
-                              Terminate & Create New
-                            </button>
-                            <button
-                              onClick={() => handleHoldAction(objection, 'hold')}
-                              disabled={updating === objection.objectionId}
-                              className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm disabled:opacity-50"
-                            >
-                              Hold Task
+                              Accept Objection
                             </button>
                           </div>
                         ) : objection.status === 'Pending' && (objection.isTagged || objection.isRaisedByMe) && (
@@ -1954,8 +2175,10 @@ export default function Dashboard() {
                   ? 'No delegated tasks assigned to you'
                   : activeTab === 'assignedToMe'
                   ? 'No tasks assigned to you'
-                  : activeTab === 'iAssigned'
-                  ? 'You haven\'t assigned any tasks yet'
+                  : activeTab === 'iAssignedToMe'
+                  ? 'You haven\'t assigned any tasks to yourself yet'
+                  : activeTab === 'iAssignedToOthers'
+                  ? 'You haven\'t assigned any tasks to others yet'
                   : activeTab === 'allTasks'
                   ? (allUsersTasksLoading ? 'Loading all tasks from all users...' : 'No tasks found in the system')
                   : 'Start by creating an FMS project or delegating tasks'}
@@ -2005,7 +2228,7 @@ export default function Dashboard() {
                           <span className="font-medium">Project:</span> {task.projectName || task.department}
                         </p>
                       )}
-                      {(activeTab === 'iAssigned' || activeTab === 'allTasks') && (
+                      {(activeTab === 'iAssignedToMe' || activeTab === 'iAssignedToOthers' || activeTab === 'allTasks') && (
                         <p className="text-xs text-slate-700 font-semibold">
                           <span className="font-medium text-slate-500">Assignee:</span>{' '}
                           {Array.isArray(task.assignee) ? task.assignee.join(', ') : task.assignee}
@@ -2141,7 +2364,7 @@ export default function Dashboard() {
 
                     {(task.status !== 'Done' && task.status.toLowerCase() !== 'completed') && (
                       <div className="flex flex-wrap gap-2 mt-4">
-                        {(activeTab !== 'iAssigned' && activeTab !== 'allTasks') ? (
+                        {(activeTab !== 'iAssignedToMe' && activeTab !== 'iAssignedToOthers' && activeTab !== 'allTasks') ? (
                           (() => {
                             // Check if user has already completed their part in multi-WHO task
                             const fmsTask = task.type === 'FMS' ? (task.source as ProjectTask) : null;
@@ -2207,7 +2430,7 @@ export default function Dashboard() {
                       <th className="px-4 py-4 text-left text-xs font-bold text-slate-700 uppercase min-w-[150px]">Project</th>
                       <th className="px-4 py-4 text-left text-xs font-bold text-slate-700 uppercase">Due Date</th>
                       <th className="px-4 py-4 text-left text-xs font-bold text-slate-700 uppercase">Status</th>
-                      {(activeTab === 'iAssigned' || activeTab === 'allTasks' || activeTab === 'assignedToMe') && (
+                      {(activeTab === 'iAssignedToMe' || activeTab === 'iAssignedToOthers' || activeTab === 'allTasks' || activeTab === 'assignedToMe') && (
                         <th className="px-4 py-4 text-left text-xs font-bold text-slate-700 uppercase">Assignee</th>
                       )}
                       <th className="px-4 py-4 text-left text-xs font-bold text-slate-700 uppercase">Actions</th>
@@ -2293,7 +2516,7 @@ export default function Dashboard() {
                           {task.status}
                         </span>
                       </td>
-                      {(activeTab === 'iAssigned' || activeTab === 'allTasks' || activeTab === 'assignedToMe') && (
+                      {(activeTab === 'iAssignedToMe' || activeTab === 'iAssignedToOthers' || activeTab === 'allTasks' || activeTab === 'assignedToMe') && (
                         <td className="px-2 sm:px-3 md:px-4 py-3 text-sm text-slate-700 font-medium">
                           <div>
                             <div className="text-slate-700 font-semibold">
@@ -2358,7 +2581,7 @@ export default function Dashboard() {
                       <td className="px-2 sm:px-3 md:px-4 py-3">
                         {(task.status !== 'Done' && task.status.toLowerCase() !== 'completed') && (
                           <div className="flex flex-wrap gap-2">
-                            {(activeTab !== 'iAssigned' && activeTab !== 'allTasks') && (() => {
+                            {(activeTab !== 'iAssignedToMe' && activeTab !== 'iAssignedToOthers' && activeTab !== 'allTasks') && (() => {
                               // Check if user has already completed their part in multi-WHO task
                               const fmsTask = task.type === 'FMS' ? (task.source as ProjectTask) : null;
                               const hasAlreadyCompleted = fmsTask && 
@@ -2401,7 +2624,7 @@ export default function Dashboard() {
                                 </>
                               );
                             })()}
-                            {(activeTab === 'iAssigned' || activeTab === 'allTasks') && (
+                            {(activeTab === 'iAssignedToMe' || activeTab === 'iAssignedToOthers' || activeTab === 'allTasks') && (
                               <span className="text-sm text-slate-500 italic">View only</span>
                             )}
                           </div>
@@ -2922,13 +3145,17 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-slate-900">
-                {holdAction === 'reject' && 'Reject Objection'}
-                {holdAction === 'terminate' && 'Terminate Task'}
-                {holdAction === 'replace' && 'Terminate & Create New Task'}
-                {holdAction === 'hold' && 'Hold Task'}
+                {objectionReviewStep === 'initial' && holdAction === 'reject' && 'Reject Objection'}
+                {objectionReviewStep === 'detailed' && holdAction === 'approve' && 'Choose Action for Accepted Objection'}
+                {objectionReviewStep === 'detailed' && holdAction === 'terminate' && 'Terminate Task'}
+                {objectionReviewStep === 'detailed' && holdAction === 'replace' && 'Terminate & Create New Task'}
+                {objectionReviewStep === 'detailed' && holdAction === 'hold' && 'Hold Task'}
               </h3>
               <button
-                onClick={() => setShowHoldModal(false)}
+                onClick={() => {
+                  setShowHoldModal(false);
+                  setObjectionReviewStep('initial');
+                }}
                 className="text-slate-400 hover:text-slate-600"
               >
                 <X className="w-6 h-6" />
@@ -2945,7 +3172,56 @@ export default function Dashboard() {
             </div>
 
             <div className="space-y-4 mb-6">
-              {holdAction === 'replace' && (
+              {/* Action selection for detailed step */}
+              {objectionReviewStep === 'detailed' && holdAction === 'approve' && (
+                <div className="space-y-3">
+                  <p className="text-sm text-slate-600 mb-3">
+                    You have accepted this objection. Please choose the action to take:
+                  </p>
+                  <div className="grid grid-cols-1 gap-2">
+                    <button
+                      onClick={() => setSelectedDetailedAction('terminate')}
+                      className={`px-4 py-3 text-left rounded-lg border transition-colors ${
+                        selectedDetailedAction === 'terminate' 
+                          ? 'bg-red-50 border-red-300 text-red-800' 
+                          : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="font-medium">Terminate Task</div>
+                      <div className="text-xs text-slate-500">Permanently stop this task</div>
+                    </button>
+                    <button
+                      onClick={() => setSelectedDetailedAction('replace')}
+                      className={`px-4 py-3 text-left rounded-lg border transition-colors ${
+                        selectedDetailedAction === 'replace' 
+                          ? 'bg-green-50 border-green-300 text-green-800' 
+                          : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="font-medium">Terminate & Create New</div>
+                      <div className="text-xs text-slate-500">Stop current task and create a new one</div>
+                    </button>
+                    <button
+                      onClick={() => setSelectedDetailedAction('hold')}
+                      className={`px-4 py-3 text-left rounded-lg border transition-colors ${
+                        selectedDetailedAction === 'hold' 
+                          ? 'bg-yellow-50 border-yellow-300 text-yellow-800' 
+                          : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="font-medium">Hold Task</div>
+                      <div className="text-xs text-slate-500">Temporarily pause this task</div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {(() => {
+                const currentAction = objectionReviewStep === 'detailed' && holdAction === 'approve' 
+                  ? selectedDetailedAction 
+                  : holdAction;
+                return currentAction === 'replace';
+              })() && (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -2988,7 +3264,15 @@ export default function Dashboard() {
                   onChange={(e) => setHoldData({ ...holdData, reason: e.target.value })}
                   rows={3}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                  placeholder={`Explain why you're ${holdAction === 'reject' ? 'rejecting' : holdAction === 'terminate' ? 'terminating' : holdAction === 'replace' ? 'replacing' : 'holding'} this task...`}
+                  placeholder={`Explain why you're ${(() => {
+                    const currentAction = objectionReviewStep === 'detailed' && holdAction === 'approve' 
+                      ? selectedDetailedAction 
+                      : holdAction;
+                    return currentAction === 'reject' ? 'rejecting' : 
+                           currentAction === 'terminate' ? 'terminating' : 
+                           currentAction === 'replace' ? 'replacing' : 
+                           currentAction === 'hold' ? 'holding' : 'processing';
+                  })()} this task...`}
                   required
                 />
               </div>

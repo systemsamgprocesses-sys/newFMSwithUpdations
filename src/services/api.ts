@@ -259,6 +259,14 @@ export const api = {
     return callAppsScript('getTasks', { userId, filter }, 3, true); // Use cache
   },
 
+  // Get tasks assigned BY a user (where user is the creator/giver)
+  async getTasksAssignedBy(userId: string, filter: string = 'all') {
+    console.log('🔍 API: getTasksAssignedBy called with userId:', userId, 'filter:', filter);
+    const result = await callAppsScript('getTasksAssignedBy', { userId, filter }, 3, false); // Disable cache for debugging
+    console.log('📋 API: getTasksAssignedBy result:', result);
+    return result;
+  },
+
   // Get task summary for dashboard
   async getTaskSummary(userId: string) {
     return callAppsScript('getTaskSummary', { userId }, 3, true); // Use cache
