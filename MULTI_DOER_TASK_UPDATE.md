@@ -1,7 +1,7 @@
 # Multi-Doer Task Completion & All Tasks Display Enhancement
 
 ## Overview
-This update ensures that tasks with multiple doers (assignees) require completion from ALL doers before being marked as "Done", and enhances the All Tasks section for Super Admin with additional context information.
+This update ensures that tasks with multiple doers (assignees) require completion from ALL doers before being marked as "Done", and enhances the All Tasks section for Super Admin to show ALL tasks from ALL users (both FMS and Normal tasks) with additional context information.
 
 ## Changes Made
 
@@ -30,13 +30,19 @@ This update ensures that tasks with multiple doers (assignees) require completio
 ### 2. All Tasks Section Enhancement (Super Admin)
 
 #### Backend Updates
-- **Location:** `allTasksForAdmin` useMemo in Dashboard.tsx (lines 473-556)
+- **Location:** `allTasksForAdmin` useMemo in Dashboard.tsx (lines 473-603)
 - **Changes:**
   - For FMS tasks: Extracts "Previous step completed by" information from the previous task in the project
   - For Normal tasks: Includes "Assigned by" (GIVEN BY) information
+  - **NEW:** Loads tasks from ALL users in the system (not just current user)
 
 #### Frontend Display
 - **UnifiedTask Interface:** Added `previousStepCompletedBy` field (line 26)
+
+- **All Users Tasks Loading:**
+  - Added `allUsersTasks` state to store tasks from all users
+  - Added `loadAllUsersTasks` function that fetches tasks for every user in the system
+  - Only loads when user is Super Admin to optimize performance
 
 - **Mobile Card View (lines 1914-1930):**
   - Normal Tasks: Shows "Assigned by: [name]" in blue
@@ -57,6 +63,7 @@ This update ensures that tasks with multiple doers (assignees) require completio
 ### All Tasks Display:
 - **For Normal Tasks:** Super Admin sees who assigned the task (the "GIVEN BY" person)
 - **For FMS Tasks:** Super Admin sees who completed the previous step in the workflow
+- **All Users Coverage:** Super Admin now sees ALL tasks from ALL users in the system (both FMS and Normal tasks)
 
 ## Benefits
 1. **Accountability:** Ensures all assigned team members complete their part

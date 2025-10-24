@@ -56,6 +56,10 @@ export default function Dashboard() {
   // Task Management state
   const [tmTasks, setTmTasks] = useState<TaskData[]>([]);
   const [tmLoading, setTmLoading] = useState(false);
+  
+  // All users' tasks for Super Admin
+  const [allUsersTasks, setAllUsersTasks] = useState<TaskData[]>([]);
+  const [allUsersTasksLoading, setAllUsersTasksLoading] = useState(false);
 
 
   // Objections state
@@ -152,6 +156,78 @@ export default function Dashboard() {
       setSelectedScoringUser(user.username);
     }
   }, [user?.username]);
+
+  // Load all users' tasks for Super Admin
+  useEffect(() => {
+    const loadAllUsersTasks = async (retryCount = 0) => {
+      if (!user?.username || (user?.role?.toLowerCase() !== 'superadmin' && user?.role?.toLowerCase() !== 'super admin')) {
+        setAllUsersTasksLoading(false); // Make sure to set loading to false if not super admin
+        return;
+      }
+      
+      setAllUsersTasksLoading(true);
+      
+      // Add timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        console.warn('All users tasks loading timeout - setting loading to false');
+        setAllUsersTasksLoading(false);
+      }, 30000); // 30 second timeout
+      
+      try {
+        console.log('Loading all users tasks for Super Admin...');
+        
+        // Get all users first
+        const usersResult = await api.getUsers();
+        if (!usersResult.success) {
+          console.error('Failed to load users for all tasks:', usersResult.message);
+          setAllUsersTasks([]); // Set empty array instead of showing error
+          return;
+        }
+        
+        const users = usersResult.users || [];
+        console.log(`Found ${users.length} users to load tasks for`);
+        const allTasks: TaskData[] = [];
+        
+        // Load tasks for each user with better error handling
+        for (const userData of users) {
+          try {
+            const tasksResult = await api.getTasks(userData.username, 'all');
+            if (tasksResult.success && tasksResult.tasks) {
+              allTasks.push(...tasksResult.tasks);
+              console.log(`✓ Loaded ${tasksResult.tasks.length} tasks for ${userData.username}`);
+            } else {
+              console.warn(`⚠️ Failed to load tasks for ${userData.username}:`, tasksResult.message);
+            }
+          } catch (err) {
+            console.error(`❌ Error loading tasks for user ${userData.username}:`, err);
+          }
+        }
+        
+        console.log(`🎯 Total loaded: ${allTasks.length} tasks from ${users.length} users`);
+        setAllUsersTasks(allTasks);
+      } catch (err) {
+        console.error('Failed to load all users tasks:', err);
+        
+        // Retry logic - retry up to 2 times
+        if (retryCount < 2) {
+          console.log(`Retrying load all users tasks (attempt ${retryCount + 1}/2)...`);
+          setTimeout(() => {
+            loadAllUsersTasks(retryCount + 1);
+          }, 2000); // Wait 2 seconds before retry
+          return; // Don't set loading to false yet
+        }
+        
+        setAllUsersTasks([]); // Set empty array after all retries failed
+      } finally {
+        clearTimeout(timeoutId);
+        if (retryCount >= 2) {
+          setAllUsersTasksLoading(false);
+        }
+      }
+    };
+
+    loadAllUsersTasks();
+  }, [user?.username, user?.role, showError]);
 
   const loadTaskManagementData = useCallback(async () => {
     if (!user?.username) return;
@@ -346,6 +422,22 @@ export default function Dashboard() {
           const project = allProjects.find(p => p.projectId === task.projectId);
           const createdBy = project?.tasks?.[0]?.who || 'Unknown'; // First task's creator
 
+          // Find the previous step's completed by information
+          let previousStepCompletedBy = '';
+          if (project && project.tasks && project.tasks.length > 0) {
+            const currentTaskIndex = project.tasks.findIndex(t => t.stepNo === task.stepNo);
+            if (currentTaskIndex > 0) {
+              const previousTask = project.tasks[currentTaskIndex - 1];
+              if (previousTask.status === 'Done') {
+                if (Array.isArray(previousTask.completedBy)) {
+                  previousStepCompletedBy = previousTask.completedBy.join(', ');
+                } else if (previousTask.completedBy) {
+                  previousStepCompletedBy = previousTask.completedBy;
+                }
+              }
+            }
+          }
+
           unified.push({
             id: `fms-${task.rowIndex || Math.random()}`,
             type: 'FMS',
@@ -357,7 +449,8 @@ export default function Dashboard() {
             projectName: task.projectName,
             isOverdue: task.status !== 'Done' && dueDate < now,
             source: task,
-            createdBy: Array.isArray(createdBy) ? createdBy[0] : createdBy
+            createdBy: Array.isArray(createdBy) ? createdBy[0] : createdBy,
+            previousStepCompletedBy: previousStepCompletedBy || undefined
           });
         } catch (error) {
           console.error('Error processing FMS task:', error, task);
@@ -470,7 +563,7 @@ export default function Dashboard() {
     return unified.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   }, [allProjects, tmTasks, user?.username]);
   
-  // All tasks (for super admin)
+  // All tasks (for super admin) - includes both FMS and Task Management tasks from all users
   const allTasksForAdmin = useMemo(() => {
     if (user?.role?.toLowerCase() !== 'superadmin' && user?.role?.toLowerCase() !== 'super admin') {
       return [];
@@ -478,7 +571,7 @@ export default function Dashboard() {
     
     const unified: UnifiedTask[] = [];
     
-    // Get all FMS tasks from all projects
+    // Get all FMS tasks from all projects (this already includes tasks from all users)
     if (allProjects && allProjects.length > 0) {
       allProjects.forEach(project => {
         if (project.tasks && project.tasks.length > 0) {
@@ -524,9 +617,10 @@ export default function Dashboard() {
       });
     }
     
-    // Get all TM tasks
-    if (tmTasks && tmTasks.length > 0) {
-      tmTasks.forEach(task => {
+    // Get all Task Management tasks from all users (for Super Admin)
+    // Only use allUsersTasks if it has data, otherwise show empty array (don't fallback to current user's tasks)
+    if (allUsersTasks && allUsersTasks.length > 0) {
+      allUsersTasks.forEach(task => {
         try {
           const dueDate = new Date(task['PLANNED DATE']);
           const now = new Date();
@@ -551,10 +645,21 @@ export default function Dashboard() {
           console.error('Error processing all TM task:', error, task);
         }
       });
+    } else if (allUsersTasksLoading) {
+      // Still loading all users tasks - don't show anything yet
+      console.log('Still loading all users tasks...');
+    } else {
+      // Failed to load all users tasks - show error message
+      console.warn('Failed to load all users tasks for Super Admin');
+      console.log('Debug - allUsersTasks state:', { 
+        allUsersTasks: allUsersTasks?.length || 0, 
+        allUsersTasksLoading, 
+        hasData: !!(allUsersTasks && allUsersTasks.length > 0) 
+      });
     }
     
     return unified.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-  }, [allProjects, tmTasks, user?.role]);
+  }, [allProjects, allUsersTasks, allUsersTasksLoading, user?.role]);
 
   const filteredTasks = useMemo(() => {
     let tasks: UnifiedTask[] = [];
@@ -668,12 +773,10 @@ export default function Dashboard() {
       return false;
     }
   }).length;
-  const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
-    return { totalTasks, fmsTaskCount, tmTaskCount, completedTasks, dueTasks, completionRate };
+    return { totalTasks, fmsTaskCount, tmTaskCount, completedTasks, dueTasks };
   }, [allUnifiedTasks, tasksAssignedTillToday]);
 
-  const { totalTasks, fmsTaskCount, tmTaskCount, completedTasks, dueTasks, completionRate } = statistics;
+  const { totalTasks, fmsTaskCount, tmTaskCount, completedTasks, dueTasks } = statistics;
 
   // Debug logging
   console.log('🔍 Task Count Debug:', {
@@ -681,7 +784,6 @@ export default function Dashboard() {
     tasksAssignedTillToday: tasksAssignedTillToday.length, // Tasks due today or before (for due tasks calc)
     totalTasks,
     completedTasks,
-    completionRate,
     fmsTasks: fmsTasks.length,
     tmTasks: tmTasks.length
   });
@@ -1018,7 +1120,7 @@ export default function Dashboard() {
       : 'bg-cyan-100 text-cyan-800 border-cyan-200';
   };
 
-  const loading = fmsLoading.myTasks || tmLoading;
+  const loading = fmsLoading.myTasks || tmLoading || allUsersTasksLoading;
 
   // Quick actions (extracted to avoid complex inline literals in JSX)
   const quickActions = useMemo(() => ([
@@ -1097,7 +1199,7 @@ export default function Dashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-4"
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4"
           >
             {[
               { label: 'Total Tasks', value: Math.max(0, totalTasks), subtitle: 'All assigned', color: 'slate', delay: 0.1 },
@@ -1105,7 +1207,6 @@ export default function Dashboard() {
               { label: 'One Time Tasks', value: tmTaskCount, subtitle: 'All assigned', color: 'cyan', delay: 0.2 },
               { label: 'Completed', value: completedTasks, subtitle: '', color: 'green', delay: 0.25 },
               { label: 'Due Tasks', value: dueTasks, subtitle: '', color: 'yellow', delay: 0.3 },
-              { label: 'Completion', value: `${completionRate}%`, subtitle: '', color: 'blue', delay: 0.35 },
              ].map((stat, index) => {
               // Define complete color schemes for each stat
               const colorSchemes: Record<string, {bg: string, border: string, text: string, value: string, hover: string}> = {
@@ -1856,7 +1957,7 @@ export default function Dashboard() {
                   : activeTab === 'iAssigned'
                   ? 'You haven\'t assigned any tasks yet'
                   : activeTab === 'allTasks'
-                  ? 'No tasks found in the system'
+                  ? (allUsersTasksLoading ? 'Loading all tasks from all users...' : 'No tasks found in the system')
                   : 'Start by creating an FMS project or delegating tasks'}
               </p>
             </div>
@@ -1913,6 +2014,24 @@ export default function Dashboard() {
                       
                       {/* Show Assigner for All Tasks tab */}
                       {activeTab === 'allTasks' && (
+                        <>
+                          {task.type === 'TASK_MANAGEMENT' && task.createdBy && (
+                            <p className="text-xs text-blue-700 font-semibold">
+                              <span className="font-medium text-blue-600">Assigned by:</span>{' '}
+                              {task.createdBy}
+                            </p>
+                          )}
+                          {task.type === 'FMS' && task.previousStepCompletedBy && (
+                            <p className="text-xs text-purple-700 font-semibold">
+                              <span className="font-medium text-purple-600">Previous step completed by:</span>{' '}
+                              {task.previousStepCompletedBy}
+                            </p>
+                          )}
+                        </>
+                      )}
+                      
+                      {/* Show Assigner for Assigned to Me tab */}
+                      {activeTab === 'assignedToMe' && (
                         <>
                           {task.type === 'TASK_MANAGEMENT' && task.createdBy && (
                             <p className="text-xs text-blue-700 font-semibold">
@@ -2088,7 +2207,7 @@ export default function Dashboard() {
                       <th className="px-4 py-4 text-left text-xs font-bold text-slate-700 uppercase min-w-[150px]">Project</th>
                       <th className="px-4 py-4 text-left text-xs font-bold text-slate-700 uppercase">Due Date</th>
                       <th className="px-4 py-4 text-left text-xs font-bold text-slate-700 uppercase">Status</th>
-                      {(activeTab === 'iAssigned' || activeTab === 'allTasks') && (
+                      {(activeTab === 'iAssigned' || activeTab === 'allTasks' || activeTab === 'assignedToMe') && (
                         <th className="px-4 py-4 text-left text-xs font-bold text-slate-700 uppercase">Assignee</th>
                       )}
                       <th className="px-4 py-4 text-left text-xs font-bold text-slate-700 uppercase">Actions</th>
@@ -2174,7 +2293,7 @@ export default function Dashboard() {
                           {task.status}
                         </span>
                       </td>
-                      {(activeTab === 'iAssigned' || activeTab === 'allTasks') && (
+                      {(activeTab === 'iAssigned' || activeTab === 'allTasks' || activeTab === 'assignedToMe') && (
                         <td className="px-2 sm:px-3 md:px-4 py-3 text-sm text-slate-700 font-medium">
                           <div>
                             <div className="text-slate-700 font-semibold">
@@ -2183,6 +2302,24 @@ export default function Dashboard() {
                             
                             {/* Show Assigner for All Tasks tab in table */}
                             {activeTab === 'allTasks' && (
+                              <>
+                                {task.type === 'TASK_MANAGEMENT' && task.createdBy && (
+                                  <div className="mt-1 text-xs text-blue-700">
+                                    <span className="font-medium text-blue-600">By:</span>{' '}
+                                    {task.createdBy}
+                                  </div>
+                                )}
+                                {task.type === 'FMS' && task.previousStepCompletedBy && (
+                                  <div className="mt-1 text-xs text-purple-700">
+                                    <span className="font-medium text-purple-600">Prev:</span>{' '}
+                                    {task.previousStepCompletedBy}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                            
+                            {/* Show Assigner for Assigned to Me tab in table */}
+                            {activeTab === 'assignedToMe' && (
                               <>
                                 {task.type === 'TASK_MANAGEMENT' && task.createdBy && (
                                   <div className="mt-1 text-xs text-blue-700">
