@@ -23,6 +23,7 @@ interface UnifiedTask {
   isOverdue: boolean;
   source: ProjectTask | TaskData;
   createdBy?: string;
+  previousStepCompletedBy?: string; // For FMS tasks - who completed the previous step
 }
 
 // Helper function to safely get attachments from a task
@@ -481,12 +482,25 @@ export default function Dashboard() {
     if (allProjects && allProjects.length > 0) {
       allProjects.forEach(project => {
         if (project.tasks && project.tasks.length > 0) {
-          project.tasks.forEach(task => {
+          project.tasks.forEach((task, index) => {
             try {
               const dueDate = new Date(task.plannedDueDate);
               const now = new Date();
               now.setHours(0, 0, 0, 0);
               dueDate.setHours(0, 0, 0, 0);
+              
+              // Find the previous step's completed by information
+              let previousStepCompletedBy = '';
+              if (index > 0) {
+                const previousTask = project.tasks[index - 1];
+                if (previousTask.status === 'Done') {
+                  if (Array.isArray(previousTask.completedBy)) {
+                    previousStepCompletedBy = previousTask.completedBy.join(', ');
+                  } else if (previousTask.completedBy) {
+                    previousStepCompletedBy = previousTask.completedBy;
+                  }
+                }
+              }
               
               unified.push({
                 id: `fms-all-${task.stepNo || Math.random()}`,
@@ -499,7 +513,8 @@ export default function Dashboard() {
                 projectName: project.projectName,
                 isOverdue: task.status !== 'Done' && dueDate < now,
                 source: task,
-                createdBy: Array.isArray(project.tasks[0]?.who) ? project.tasks[0]?.who[0] : (project.tasks[0]?.who || 'Unknown')
+                createdBy: Array.isArray(project.tasks[0]?.who) ? project.tasks[0]?.who[0] : (project.tasks[0]?.who || 'Unknown'),
+                previousStepCompletedBy: previousStepCompletedBy || undefined
               });
             } catch (error) {
               console.error('Error processing all FMS task:', error, task);
@@ -1896,6 +1911,24 @@ export default function Dashboard() {
                         </p>
                       )}
                       
+                      {/* Show Assigner for All Tasks tab */}
+                      {activeTab === 'allTasks' && (
+                        <>
+                          {task.type === 'TASK_MANAGEMENT' && task.createdBy && (
+                            <p className="text-xs text-blue-700 font-semibold">
+                              <span className="font-medium text-blue-600">Assigned by:</span>{' '}
+                              {task.createdBy}
+                            </p>
+                          )}
+                          {task.type === 'FMS' && task.previousStepCompletedBy && (
+                            <p className="text-xs text-purple-700 font-semibold">
+                              <span className="font-medium text-purple-600">Previous step completed by:</span>{' '}
+                              {task.previousStepCompletedBy}
+                            </p>
+                          )}
+                        </>
+                      )}
+                      
                       {/* Multi-WHO completion status */}
                       {Array.isArray(task.assignee) && task.assignee.length > 1 && task.type === 'FMS' && (
                         (() => {
@@ -2144,7 +2177,27 @@ export default function Dashboard() {
                       {(activeTab === 'iAssigned' || activeTab === 'allTasks') && (
                         <td className="px-2 sm:px-3 md:px-4 py-3 text-sm text-slate-700 font-medium">
                           <div>
-                            {Array.isArray(task.assignee) ? task.assignee.join(', ') : task.assignee}
+                            <div className="text-slate-700 font-semibold">
+                              {Array.isArray(task.assignee) ? task.assignee.join(', ') : task.assignee}
+                            </div>
+                            
+                            {/* Show Assigner for All Tasks tab in table */}
+                            {activeTab === 'allTasks' && (
+                              <>
+                                {task.type === 'TASK_MANAGEMENT' && task.createdBy && (
+                                  <div className="mt-1 text-xs text-blue-700">
+                                    <span className="font-medium text-blue-600">By:</span>{' '}
+                                    {task.createdBy}
+                                  </div>
+                                )}
+                                {task.type === 'FMS' && task.previousStepCompletedBy && (
+                                  <div className="mt-1 text-xs text-purple-700">
+                                    <span className="font-medium text-purple-600">Prev:</span>{' '}
+                                    {task.previousStepCompletedBy}
+                                  </div>
+                                )}
+                              </>
+                            )}
                             
                             {/* Multi-WHO completion status in table */}
                             {Array.isArray(task.assignee) && task.assignee.length > 1 && task.type === 'FMS' && (

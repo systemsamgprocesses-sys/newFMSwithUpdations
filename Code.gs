@@ -1815,6 +1815,15 @@ function updateTaskStatus(rowIndex, status, username) {
         });
       }
       
+      // Check if user has already completed
+      if (completionsByUser[username] && completionsByUser[username] !== null) {
+        Logger.log('⚠️ User ' + username + ' has already completed this task.');
+        return { 
+          success: false, 
+          message: 'You have already completed your part of this task. Waiting for others to complete.' 
+        };
+      }
+      
       // Mark this user as completed
       completionsByUser[username] = timestamp;
       Logger.log('Updated completions: ' + JSON.stringify(completionsByUser));
